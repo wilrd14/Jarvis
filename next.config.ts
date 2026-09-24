@@ -5,3 +5,7 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+// Enables Cloudflare bindings/env vars during `next dev`.
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+initOpenNextCloudflareForDev();
