@@ -85,6 +85,5 @@ ${withBg ? '<rect width="512" height="512" rx="112" fill="url(#bg)"/>' : ""}
   const ico = Buffer.concat([head, ...pngs]);
   fs.writeFileSync(path.join(root, "scripts", "desktop", "jarvis.ico"), ico);
   fs.writeFileSync(path.join(root, "src", "app", "favicon.ico"), ico);
-    { input: await render(128), left: 6, top: 6 }, { input: await render(48), left: 160, top: 46 }, { input: await render(16), left: 300, top: 62 } ]).png().toBuffer());
   console.log("logo generado");
 })();
