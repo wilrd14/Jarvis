@@ -4,10 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type VoiceStatus = "idle" | "listening" | "processing";
 
-const SILENCE_MS = 1200; // silencio tras la voz para cortar solo
+const DEFAULT_SILENCE_MS = 1200; // silencio tras la voz para cortar solo
 const MIN_VOICE_MS = 300; // voz mínima para considerarlo habla
 const MAX_RECORD_MS = 30_000;
-const NO_SPEECH_TIMEOUT_MS = 10_000; // si nadie habla, se cancela
+const DEFAULT_NO_SPEECH_MS = 10_000; // si nadie habla, se cancela
 const CALIBRATION_MS = 400; // ruido ambiente inicial
 const MIN_THRESHOLD = 0.015; // RMS mínimo para contar como voz
 const NOISE_FACTOR = 3;
@@ -66,7 +66,16 @@ function micErrorMessage(err: unknown): string {
   return "No pude acceder al micrófono.";
 }
 
-export function useVoiceInput(onFinal: (text: string) => void) {
+export interface VoiceInputOptions {
+  silenceMs?: number; // silencio tras la voz para cortar solo
+  noSpeechMs?: number; // tiempo máximo esperando a que alguien hable
+}
+
+export interface VoiceStartOptions {
+  noSpeechMs?: number; // sobrescribe el valor por defecto solo para esta sesión
+}
+
+export function useVoiceInput(onFinal: (text: string) => void, options: VoiceInputOptions = {}) {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +84,11 @@ export function useVoiceInput(onFinal: (text: string) => void) {
   useEffect(() => {
     onFinalRef.current = onFinal;
   }, [onFinal]);
+
+  const optionsRef = useRef(options);
+  useEffect(() => {
+    optionsRef.current = options;
+  });
 
   const sessionRef = useRef<{
     cancelled: boolean;
@@ -106,7 +120,7 @@ export function useVoiceInput(onFinal: (text: string) => void) {
 
   const startingRef = useRef(false);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (startOpts: VoiceStartOptions = {}) => {
     if (sessionRef.current || startingRef.current) return;
     startingRef.current = true;
     setError(null);
@@ -144,6 +158,8 @@ export function useVoiceInput(onFinal: (text: string) => void) {
       if (e.data.size > 0) chunks.push(e.data);
     };
 
+    const silenceMs = optionsRef.current.silenceMs ?? DEFAULT_SILENCE_MS;
+    const noSpeechMs = startOpts.noSpeechMs ?? optionsRef.current.noSpeechMs ?? DEFAULT_NO_SPEECH_MS;
     const t0 = performance.now();
     let last = t0;
     let calibSum = 0;
@@ -178,11 +194,11 @@ export function useVoiceInput(onFinal: (text: string) => void) {
         lastVoiceAt = now;
       }
 
-      if (voiceMs >= MIN_VOICE_MS && now - lastVoiceAt >= SILENCE_MS) {
+      if (voiceMs >= MIN_VOICE_MS && now - lastVoiceAt >= silenceMs) {
         finish(false);
       } else if (elapsed >= MAX_RECORD_MS) {
         finish(false);
-      } else if (voiceMs < MIN_VOICE_MS && elapsed >= NO_SPEECH_TIMEOUT_MS) {
+      } else if (voiceMs < MIN_VOICE_MS && elapsed >= noSpeechMs) {
         finish(true); // nadie habló
       }
     }, 50);

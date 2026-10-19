@@ -49,3 +49,6 @@ cloudflare-env.d.ts
 # worktrees de subagentes y logs locales
 .claude/
 dev.log
+
+# ajustes locales de Jarvis (contienen la API key)
+.jarvis-data/

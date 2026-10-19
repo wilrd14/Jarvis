@@ -1,7 +1,8 @@
 // Transcripción de voz: recibe el audio crudo (WAV PCM16) como cuerpo de la
 // petición y lo transcribe con un modelo Gemini vía OpenRouter.
 
-const DEFAULT_STT_MODEL = "google/gemini-3.1-flash-lite";
+import { getSetting } from "@/lib/settings";
+
 const MAX_BYTES = 8 * 1024 * 1024;
 
 function json(body: unknown, status = 200) {
@@ -21,9 +22,9 @@ function formatFromMime(mime: string): string {
 }
 
 export async function POST(req: Request) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = getSetting("openrouterApiKey");
   if (!apiKey) {
-    return json({ error: "Falta OPENROUTER_API_KEY en .env.local." }, 500);
+    return json({ error: "Falta la API key de OpenRouter: configúrala en Ajustes." }, 500);
   }
 
   const buf = await req.arrayBuffer();
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
 
   const format = formatFromMime(req.headers.get("content-type") ?? "audio/wav");
   const data = Buffer.from(buf).toString("base64");
-  const model = process.env.OPENROUTER_STT_MODEL || DEFAULT_STT_MODEL;
+  const model = getSetting("sttModel");
 
   let res: Response;
   try {

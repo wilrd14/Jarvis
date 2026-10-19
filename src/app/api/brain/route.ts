@@ -1,4 +1,5 @@
 import { USER_NAME, ASSISTANT_NAME } from "@/lib/config";
+import { getSetting } from "@/lib/settings";
 import { buildActionsPrompt, parseAction, type AssistantAction } from "@/lib/actions";
 
 interface ChatTurn {
@@ -56,10 +57,10 @@ export async function POST(req: Request) {
     });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = getSetting("openrouterApiKey");
   if (!apiKey) {
     return new Response(
-      JSON.stringify({ error: "Falta OPENROUTER_API_KEY en .env.local." }),
+      JSON.stringify({ error: "Falta la API key de OpenRouter: configúrala en Ajustes." }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.OPENROUTER_MODEL ?? "anthropic/claude-sonnet-5.5",
+      model: getSetting("model"),
       // Margen amplio: el modelo razona antes de responder y con 700 el JSON salía cortado.
       max_tokens: 2500,
       messages: [
