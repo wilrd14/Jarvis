@@ -304,23 +304,36 @@ export default function Home() {
         </AnimatePresence>
       </div>
 
-      <form onSubmit={handleTextSubmit} className="mb-6 flex w-full max-w-sm gap-2">
-        <input
-          type="text"
-          value={textInput}
-          onChange={(e) => setTextInput(e.target.value)}
-          disabled={state === "processing" || state === "speaking"}
-          placeholder={`Escribile a ${ASSISTANT_NAME}...`}
-          className="flex-1 rounded-lg border border-emerald/30 bg-panel px-3 py-2 text-sm text-foreground placeholder:text-foreground/40 outline-none focus:border-turquoise/60 disabled:opacity-40"
-        />
-        <button
-          type="submit"
-          disabled={state === "processing" || state === "speaking" || !textInput.trim()}
-          className="rounded-lg bg-emerald/90 px-4 py-2 text-sm font-medium text-background transition hover:bg-emerald disabled:opacity-40"
-        >
-          Enviar
-        </button>
-      </form>
+      {/* El cuadro de texto se oculta mientras el usuario habla por voz. */}
+      <AnimatePresence>
+        {!isListening && !reopening && (
+          <motion.form
+            key="text-input"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2 }}
+            onSubmit={handleTextSubmit}
+            className="mb-6 flex w-full max-w-sm gap-2"
+          >
+            <input
+              type="text"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              disabled={state === "processing" || state === "speaking"}
+              placeholder={`Escribile a ${ASSISTANT_NAME}...`}
+              className="flex-1 rounded-lg border border-emerald/30 bg-panel px-3 py-2 text-sm text-foreground placeholder:text-foreground/40 outline-none focus:border-turquoise/60 disabled:opacity-40"
+            />
+            <button
+              type="submit"
+              disabled={state === "processing" || state === "speaking" || !textInput.trim()}
+              className="rounded-lg bg-emerald/90 px-4 py-2 text-sm font-medium text-background transition hover:bg-emerald disabled:opacity-40"
+            >
+              Enviar
+            </button>
+          </motion.form>
+        )}
+      </AnimatePresence>
 
       <button
         onClick={handleMicClick}
