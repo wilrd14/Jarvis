@@ -1,5 +1,7 @@
 import { getActionDefinition } from "@/lib/actions";
 import "@/lib/store/register";
+import { verifyProposal } from "@/lib/proposals.server";
+import { rateLimit, tooMany } from "@/lib/guard";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -13,6 +15,7 @@ function json(body: unknown, status = 200) {
  * del registro y los campos con el `parse` estricto de cada acción.
  */
 export async function POST(req: Request) {
+  if (!rateLimit("execute", 60)) return tooMany();
   let body: unknown;
   try {
     body = await req.json();
@@ -32,6 +35,14 @@ export async function POST(req: Request) {
 
   const action = def.parse(raw);
   if (!action) return json({ ok: false, error: "Campos de la acción inválidos." }, 400);
+
+  // Las acciones que piden confirmación solo se ejecutan si el cerebro las propuso (firma válida).
+  if (def.risk === "confirm") {
+    const token = (body as { actionToken?: unknown }).actionToken;
+    if (!verifyProposal(action, token)) {
+      return json({ ok: false, error: "Esta acción no fue propuesta por Jarvis o ya caducó." }, 403);
+    }
+  }
 
   try {
     const result = await def.execution.run(action);

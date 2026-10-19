@@ -103,7 +103,12 @@ export function useReminders(announce: (text: string) => void) {
       if (busy) return;
       busy = true;
       try {
-        const res = await fetch("/api/reminders/due", { cache: "no-store" });
+        const res = await fetch("/api/reminders/due", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+          cache: "no-store",
+        });
         if (!res.ok) return;
         const data = (await res.json()) as { due?: DueItem[] };
         const due = Array.isArray(data.due) ? data.due : [];

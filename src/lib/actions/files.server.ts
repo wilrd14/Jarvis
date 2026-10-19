@@ -33,11 +33,11 @@ const SKIP_DIRS = new Set(["node_modules", ".git", "appdata", "$recycle.bin", "s
 const SENSITIVE_RE =
   /(api[ _-]?keys?|\.env|passw|contrase|secret|credential|token|id_rsa|id_ed25519|\.pem$|\.key$|\.pfx$|\.kdbx?$|wallet|seed ?phrase)/i;
 
-// Ejecutables y scripts: abrirlos equivale a ejecutar código.
-const BLOCKED_EXT = new Set([
-  ".exe", ".com", ".scr", ".msi", ".msp", ".bat", ".cmd", ".ps1", ".psm1", ".vbs", ".vbe",
-  ".js", ".jse", ".wsf", ".wsh", ".hta", ".lnk", ".url", ".reg", ".dll", ".jar", ".cpl",
-  ".sh", ".appref-ms", ".application", ".gadget", ".inf", ".pif", ".msc",
+// Solo se abren tipos de documento/medio que no ejecutan código al abrirse
+// (se excluyen html, svg, macros de Office, chm, iso, scripts, ejecutables, etc.).
+const ALLOWED_EXT = new Set([
+  ".pdf", ".txt", ".md", ".csv", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp",
+  ".mp3", ".wav", ".m4a", ".mp4", ".mkv", ".mov", ".avi", ".docx", ".xlsx", ".pptx", ".zip",
 ]);
 
 export interface FoundFile {
@@ -124,7 +124,7 @@ export async function searchFiles(query: string): Promise<FoundFile[]> {
         continue;
       }
       if (!e.isFile()) continue;
-      if (isSensitive(e.name) || BLOCKED_EXT.has(path.extname(e.name).toLowerCase())) continue;
+      if (isSensitive(e.name) || !ALLOWED_EXT.has(path.extname(e.name).toLowerCase())) continue;
       const n = norm(e.name);
       if (!tokens.every((t) => n.includes(t))) continue;
       let mtime = 0;
@@ -167,7 +167,7 @@ export async function openAllowedFile(rawPath: string): Promise<ServerActionResu
 
   const name = path.basename(real);
   if (isSensitive(name) || isSensitive(path.basename(resolved))) return deny("Ese archivo está protegido.");
-  if (BLOCKED_EXT.has(path.extname(real).toLowerCase())) return deny("No abro ese tipo de archivo.");
+  if (!ALLOWED_EXT.has(path.extname(real).toLowerCase())) return deny("No abro ese tipo de archivo.");
 
   let stat;
   try {

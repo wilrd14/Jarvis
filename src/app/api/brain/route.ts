@@ -1,7 +1,9 @@
 import { USER_NAME, ASSISTANT_NAME } from "@/lib/config";
 import { answerWithWebSearch, type WebSource } from "@/lib/websearch.server";
 import { getSetting } from "@/lib/settings";
-import { buildActionsPrompt, parseAction, type AssistantAction } from "@/lib/actions";
+import { LIMITS, jsonResponse, providerError, rateLimit, tooMany } from "@/lib/guard";
+import { signProposal } from "@/lib/proposals.server";
+import { buildActionsPrompt, getActionDefinition, parseAction, type AssistantAction } from "@/lib/actions";
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -60,13 +62,22 @@ function extractJson(text: string): BrainResponseBody | null {
 }
 
 export async function POST(req: Request) {
-  const { message, history = [] } = (await req.json()) as BrainRequestBody;
+  if (!rateLimit("brain", 30)) return tooMany();
+
+  let body: Partial<BrainRequestBody>;
+  try {
+    body = (await req.json()) as Partial<BrainRequestBody>;
+  } catch {
+    return jsonResponse({ error: "JSON inválido." }, 400);
+  }
+  const { message } = body;
+  const history = Array.isArray(body.history) ? body.history : [];
 
   if (!message || typeof message !== "string") {
-    return new Response(JSON.stringify({ error: "Falta el mensaje." }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: "Falta el mensaje." }, 400);
+  }
+  if (message.length > LIMITS.messageChars) {
+    return jsonResponse({ error: "El mensaje es demasiado largo." }, 413);
   }
 
   const apiKey = getSetting("openrouterApiKey");
@@ -78,8 +89,14 @@ export async function POST(req: Request) {
   }
 
   const recent = history
-    .filter((t) => (t.role === "user" || t.role === "assistant") && typeof t.content === "string")
-    .slice(-12);
+    .filter(
+      (t): t is ChatTurn =>
+        !!t &&
+        (t.role === "user" || t.role === "assistant") &&
+        typeof t.content === "string"
+    )
+    .slice(-LIMITS.historyItems)
+    .map((t) => ({ role: t.role, content: t.content.slice(0, LIMITS.historyItemChars) }));
 
   const model = getSetting("model");
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -101,11 +118,7 @@ export async function POST(req: Request) {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    return new Response(
-      JSON.stringify({ error: `OpenRouter error: ${errorText}` }),
-      { status: response.status, headers: { "Content-Type": "application/json" } }
-    );
+    return providerError("OpenRouter", response.status, await response.text());
   }
 
   const data = await response.json();
@@ -135,7 +148,12 @@ export async function POST(req: Request) {
   }
   delete parsed.search;
 
-  return new Response(JSON.stringify(parsed), {
-    headers: { "Content-Type": "application/json" },
-  });
+  // Las acciones que piden confirmación viajan con una firma que el servidor exigirá al ejecutarlas.
+  const def = parsed.action ? getActionDefinition(parsed.action.type) : undefined;
+  const actionToken =
+    parsed.action && def?.risk === "confirm" && def.execution.kind === "server"
+      ? signProposal(parsed.action)
+      : undefined;
+
+  return jsonResponse({ ...parsed, actionToken });
 }

@@ -39,6 +39,8 @@ function sanitize(raw: unknown): Reminder | null {
 const pending = (r: Reminder) => !r.firedAt && !r.canceledAt;
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
+const MAX_REMINDERS = 1000;
+
 export function addReminder(kind: ReminderKind, text: string, dueAtMs: number): Promise<Reminder> {
   const now = Date.now();
   const r: Reminder = {
@@ -53,6 +55,7 @@ export function addReminder(kind: ReminderKind, text: string, dueAtMs: number): 
     for (let i = items.length - 1; i >= 0; i--) {
       if (!pending(items[i]) && Date.parse(items[i].dueAt) < now - KEEP_MS) items.splice(i, 1);
     }
+    if (items.length >= MAX_REMINDERS) throw new Error(`Límite de ${MAX_REMINDERS} recordatorios alcanzado.`);
     items.push(r);
     return r;
   });

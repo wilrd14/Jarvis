@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
  * disparados, así que cada uno se devuelve una sola vez. Los que vencieron con
  * la app apagada salen en la primera consulta.
  */
-export async function GET() {
+export async function POST() {
   try {
     const due = await takeDue();
     return Response.json({ due }, { headers: { "Cache-Control": "no-store" } });

@@ -2,8 +2,9 @@
 // petición y lo transcribe con un modelo Gemini vía OpenRouter.
 
 import { getSetting } from "@/lib/settings";
+import { LIMITS, providerError, rateLimit, tooMany } from "@/lib/guard";
 
-const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_BYTES = LIMITS.listenBytes;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -22,6 +23,7 @@ function formatFromMime(mime: string): string {
 }
 
 export async function POST(req: Request) {
+  if (!rateLimit("listen", 20)) return tooMany();
   const apiKey = getSetting("openrouterApiKey");
   if (!apiKey) {
     return json({ error: "Falta la API key de OpenRouter: configúrala en Ajustes." }, 500);
@@ -72,11 +74,7 @@ export async function POST(req: Request) {
   }
 
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    return json(
-      { error: `Error de transcripción (${res.status}): ${detail.slice(0, 300)}` },
-      502
-    );
+    return providerError("transcripción", res.status, await res.text().catch(() => ""));
   }
 
   const out = await res.json().catch(() => null);

@@ -55,7 +55,11 @@ export function sanitize(input: unknown): Partial<Settings> {
   const src = input as Record<string, unknown>;
   for (const k of STRING_FIELDS) {
     const v = src[k];
-    if (typeof v === "string" && v.length <= 300 && !/[\r\n]/.test(v)) out[k] = v.trim();
+    if (typeof v !== "string" || v.length > 300 || /[\r\n]/.test(v)) continue;
+    const t = v.trim();
+    // Modelos y voz: solo caracteres de identificadores (nada que pueda alterar la petición).
+    if (k !== "openrouterApiKey" && t && !/^[A-Za-z0-9._~:/-]{1,120}$/.test(t)) continue;
+    out[k] = t;
   }
   for (const k of BOOL_FIELDS) {
     if (typeof src[k] === "boolean") out[k] = src[k] as boolean;

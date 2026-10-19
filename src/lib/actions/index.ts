@@ -84,7 +84,10 @@ export interface ActionOutcome {
   message?: string;
 }
 
-export async function runAssistantAction(action: AssistantAction): Promise<ActionOutcome> {
+export async function runAssistantAction(
+  action: AssistantAction,
+  actionToken?: string
+): Promise<ActionOutcome> {
   const def = REGISTRY.get(action.type);
   if (!def) throw new Error("Acción desconocida.");
   if (def.execution.kind === "client") {
@@ -94,7 +97,7 @@ export async function runAssistantAction(action: AssistantAction): Promise<Actio
   const res = await fetch("/api/actions/execute", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, actionToken }),
   });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data?.ok) {

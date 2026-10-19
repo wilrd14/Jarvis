@@ -33,10 +33,13 @@ function matches(n: Note, query: string) {
     .every((w) => hay.includes(w));
 }
 
+const MAX_NOTES = 500;
+
 export function addNote(text: string, title?: string): Promise<Note> {
   const note: Note = { id: randomUUID().slice(0, 8), text, createdAt: new Date().toISOString() };
   if (title) note.title = title;
   return updateCollection(FILE, sanitize, (items) => {
+    if (items.length >= MAX_NOTES) throw new Error(`Límite de ${MAX_NOTES} notas alcanzado.`);
     items.push(note);
     return note;
   });

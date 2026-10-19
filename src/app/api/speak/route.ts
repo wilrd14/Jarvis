@@ -1,4 +1,5 @@
 import { getSetting } from "@/lib/settings";
+import { LIMITS, providerError, rateLimit, tooMany } from "@/lib/guard";
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
@@ -49,7 +50,7 @@ async function speakWithOpenRouter(text: string, apiKey: string) {
 
   if (!response.ok) {
     const errorText = await response.text();
-    return json({ error: `OpenRouter error: ${errorText}` }, response.status || 502);
+    return providerError("OpenRouter", response.status || 502, errorText);
   }
 
   // El content-type indica la frecuencia, p. ej. "audio/pcm;rate=24000;channels=1".
@@ -83,7 +84,7 @@ async function speakWithElevenLabs(text: string, apiKey: string, voiceId: string
 
   if (!response.ok) {
     const errorText = await response.text();
-    return json({ error: `ElevenLabs error: ${errorText}` }, response.status);
+    return providerError("ElevenLabs", response.status, errorText);
   }
 
   return new Response(await response.arrayBuffer(), {
@@ -92,10 +93,20 @@ async function speakWithElevenLabs(text: string, apiKey: string, voiceId: string
 }
 
 export async function POST(req: Request) {
-  const { text } = await req.json();
+  if (!rateLimit("speak", 30)) return tooMany();
+
+  let text: unknown;
+  try {
+    ({ text } = await req.json());
+  } catch {
+    return json({ error: "JSON inválido." }, 400);
+  }
 
   if (!text || typeof text !== "string") {
     return json({ error: "Falta el texto a sintetizar." }, 400);
+  }
+  if (text.length > LIMITS.speakChars) {
+    return json({ error: "El texto es demasiado largo para leerlo en voz alta." }, 413);
   }
 
   const openRouterKey = getSetting("openrouterApiKey");

@@ -33,6 +33,7 @@ export default function Home() {
     `Hola ${USER_NAME}, soy ${ASSISTANT_NAME}. Toca el micrófono para hablarme.`
   );
   const [pendingAction, setPendingAction] = useState<AssistantAction | null>(null);
+  const [pendingToken, setPendingToken] = useState<string | undefined>(undefined);
   const [sources, setSources] = useState<{ title: string; url: string }[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [textInput, setTextInput] = useState("");
@@ -103,7 +104,7 @@ export default function Home() {
     }
   }, [playWithAmplitude]);
 
-  const handleFinalTranscript = useCallback(async (text: string) => {
+  const handleFinalTranscript = useCallback(async (text: string, opts?: { untrusted?: boolean }) => {
     if (!text) {
       setState("idle");
       return;
@@ -128,7 +129,8 @@ export default function Home() {
         let reply: string = data.reply;
         let action: AssistantAction | null = data.action ?? null;
 
-        if (action && turn === 0 && isAutoRun(action)) {
+        // Un turno originado en datos externos (portapapeles) nunca ejecuta acciones solo.
+        if (action && turn === 0 && !opts?.untrusted && isAutoRun(action)) {
           try {
             const out = await runAssistantAction(action);
             if (out.followUp) {
@@ -155,6 +157,7 @@ export default function Home() {
         setLastReply(reply);
         setSources(Array.isArray(data.sources) ? data.sources : []);
         setPendingAction(action);
+        setPendingToken(typeof data.actionToken === "string" ? data.actionToken : undefined);
         if (VOICE_OUTPUT_ENABLED) {
           await speak(reply);
         } else {
@@ -289,11 +292,12 @@ export default function Home() {
           {pendingAction && (
             <ActionCard
               action={pendingAction}
+              token={pendingToken}
               onDone={(out) => {
                 setPendingAction(null);
                 if (out?.followUp) {
                   // El resultado (portapapeles, archivos) vuelve al cerebro como siguiente turno.
-                  handleFinalTranscript(out.followUp);
+                  handleFinalTranscript(out.followUp, { untrusted: true });
                 } else if (out?.message) {
                   setLastReply(out.message);
                   void speak(out.message);

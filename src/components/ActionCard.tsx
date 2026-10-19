@@ -6,11 +6,13 @@ import { describeAction, runAssistantAction, type AssistantAction } from "@/lib/
 
 interface ActionCardProps {
   action: AssistantAction;
+  /** Firma de la propuesta (la exige el servidor para acciones que piden confirmación). */
+  token?: string;
   /** Se llama tras ejecutar la acción con éxito. */
   onDone: (outcome?: { followUp?: string; message?: string }) => void;
 }
 
-export default function ActionCard({ action, onDone }: ActionCardProps) {
+export default function ActionCard({ action, token, onDone }: ActionCardProps) {
   const { title, detail } = describeAction(action);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +21,7 @@ export default function ActionCard({ action, onDone }: ActionCardProps) {
     setBusy(true);
     setError(null);
     try {
-      const out = await runAssistantAction(action);
+      const out = await runAssistantAction(action, token);
       onDone(out);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo ejecutar la acción.");

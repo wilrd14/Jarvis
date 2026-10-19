@@ -27,6 +27,13 @@ interface RunResult {
 }
 
 /** spawn sin shell; el comando y los args son siempre constantes o validados. */
+function childEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const env = { ...process.env, ...extra };
+  delete env.OPENROUTER_API_KEY;
+  delete env.ELEVENLABS_API_KEY;
+  return env;
+}
+
 function run(
   file: string,
   args: string[],
@@ -37,7 +44,8 @@ function run(
       shell: false,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, ...opts.env },
+      // Los procesos hijos no necesitan (ni deben heredar) las claves de API.
+      env: childEnv(opts.env),
     });
     let stdout = "";
     let stderr = "";
