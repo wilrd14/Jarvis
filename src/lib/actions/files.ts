@@ -1,4 +1,5 @@
 import { isRecord, str, type ActionDefinition } from "./types";
+import { SERVER_ONLY } from "./pc-shared";
 
 export interface FileSearchAction {
   type: "file_search";
@@ -28,6 +29,7 @@ export const fileSearchAction: ActionDefinition<FileSearchAction> = {
   execution: {
     kind: "server",
     async run(a) {
+      if (typeof window !== "undefined") return SERVER_ONLY;
       const { searchFiles } = await import("./files.server");
       const found = await searchFiles(a.query);
       if (!found.length) {
@@ -62,6 +64,7 @@ export const fileOpenAction: ActionDefinition<FileOpenAction> = {
   execution: {
     kind: "server",
     async run(a) {
+      if (typeof window !== "undefined") return SERVER_ONLY;
       const { openAllowedFile } = await import("./files.server");
       return openAllowedFile(a.path);
     },
