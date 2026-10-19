@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import HologramCore, { AssistantState } from "@/components/HologramCore";
 import {
@@ -18,9 +18,8 @@ const STATE_LABEL: Record<AssistantState, string> = {
   speaking: "Hablando…",
 };
 
-// La voz de ElevenLabs todavía no está lista (falta clonar una voz propia).
-// Mientras tanto, Jarvis responde solo por texto.
-const VOICE_OUTPUT_ENABLED = false;
+// Voz de salida vía /api/speak (OpenRouter, con ElevenLabs como respaldo).
+const VOICE_OUTPUT_ENABLED = true;
 
 export default function Home() {
   const [state, setState] = useState<AssistantState>("idle");
@@ -30,6 +29,7 @@ export default function Home() {
   const [pendingAction, setPendingAction] = useState<AssistantAction | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [textInput, setTextInput] = useState("");
+  const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
 
   const { transcript, isListening, start, stop } = useSpeechRecognition();
   const { amplitude, playWithAmplitude } = useAudioAmplitude();
@@ -69,13 +69,18 @@ export default function Home() {
       const res = await fetch("/api/brain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, history: historyRef.current }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         throw new Error(data?.error ?? "Error al pensar la respuesta.");
       }
       const data = await res.json();
+      historyRef.current = [
+        ...historyRef.current,
+        { role: "user" as const, content: text },
+        { role: "assistant" as const, content: data.reply },
+      ].slice(-12);
       setLastReply(data.reply);
       setPendingAction(data.action ?? null);
       if (VOICE_OUTPUT_ENABLED) {

@@ -27,6 +27,8 @@ export function useAudioAmplitude() {
       audioCtxRef.current = new Ctx();
     }
     const audioCtx = audioCtxRef.current;
+    // Chrome crea el contexto suspendido si no hubo gesto reciente: sin esto no suena nada.
+    if (audioCtx.state === "suspended") void audioCtx.resume();
     const source = audioCtx.createMediaElementSource(audio);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
@@ -52,7 +54,15 @@ export function useAudioAmplitude() {
       onEnded?.();
     };
 
-    audio.play();
+    audio.onerror = () => {
+      stop();
+      onEnded?.();
+    };
+
+    audio.play().catch(() => {
+      stop();
+      onEnded?.();
+    });
     rafRef.current = requestAnimationFrame(tick);
   }, [stop]);
 

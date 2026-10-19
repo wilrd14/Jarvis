@@ -1,8 +1,14 @@
 import { USER_NAME, ASSISTANT_NAME } from "@/lib/config";
 import type { AssistantAction } from "@/lib/actions";
 
+interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 interface BrainRequestBody {
   message: string;
+  history?: ChatTurn[];
 }
 
 interface BrainResponseBody {
@@ -10,7 +16,7 @@ interface BrainResponseBody {
   action: AssistantAction | null;
 }
 
-const SYSTEM_PROMPT = `Eres ${ASSISTANT_NAME}, el asistente de voz personal de ${USER_NAME}. Respondes siempre en español, de forma breve, natural y cálida, como si hablaras en voz alta.
+const buildSystemPrompt = () => `Eres ${ASSISTANT_NAME}, el asistente de voz personal de ${USER_NAME}. Respondes siempre en español, de forma breve, natural y cálida, como si hablaras en voz alta.
 
 Cuando ${USER_NAME} te pida enviar un correo o crear un evento de calendario, NO digas que ya lo hiciste — tú solo preparas la acción, y es ${USER_NAME} quien la confirma con un clic. Usa frases como "Te dejé listo el correo para que lo confirmes" o "Te preparé el evento, solo falta que le des guardar".
 
@@ -32,7 +38,11 @@ Si implica crear un evento de calendario, usa fechas ISO 8601 en UTC:
   "action": { "type": "calendar", "title": "...", "details": "...", "location": "...", "start": "2026-08-15T18:00:00Z", "end": "2026-08-15T19:00:00Z" }
 }
 
-Si no tienes destinatario, asunto, fecha u hora suficientes, pregunta por los datos faltantes en "reply" y deja "action" en null.`;
+Si no tienes destinatario, asunto, fecha u hora suficientes, pregunta por los datos faltantes en "reply" y deja "action" en null.
+
+Eres además un asistente muy capaz: razonas con cuidado, respondes preguntas de cualquier tema con datos correctos, ayudas a planear, redactar, programar y decidir. Usa el contexto de la conversación previa. Si no sabes algo, dilo con honestidad en vez de inventarlo. Mantén "reply" corto (1 a 3 frases) porque se lee en voz alta: sin listas, markdown ni símbolos.
+
+Fecha y hora actuales: ${new Date().toLocaleString("es-ES", { timeZone: "America/Argentina/Buenos_Aires", dateStyle: "full", timeStyle: "short" })}. Úsala para resolver "mañana", "el viernes", etc.`;
 
 function extractJson(text: string): BrainResponseBody | null {
   const trimmed = text.trim();
@@ -48,7 +58,7 @@ function extractJson(text: string): BrainResponseBody | null {
 }
 
 export async function POST(req: Request) {
-  const { message } = (await req.json()) as BrainRequestBody;
+  const { message, history = [] } = (await req.json()) as BrainRequestBody;
 
   if (!message || typeof message !== "string") {
     return new Response(JSON.stringify({ error: "Falta el mensaje." }), {
@@ -57,41 +67,45 @@ export async function POST(req: Request) {
     });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     return new Response(
-      JSON.stringify({ error: "Falta ANTHROPIC_API_KEY en .env.local." }),
+      JSON.stringify({ error: "Falta OPENROUTER_API_KEY en .env.local." }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const recent = history
+    .filter((t) => (t.role === "user" || t.role === "assistant") && typeof t.content === "string")
+    .slice(-12);
+
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-5",
-      max_tokens: 512,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: message }],
+      model: process.env.OPENROUTER_MODEL ?? "anthropic/claude-sonnet-5.5",
+      max_tokens: 700,
+      messages: [
+        { role: "system", content: buildSystemPrompt() },
+        ...recent,
+        { role: "user", content: message },
+      ],
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
     return new Response(
-      JSON.stringify({ error: `Anthropic error: ${errorText}` }),
+      JSON.stringify({ error: `OpenRouter error: ${errorText}` }),
       { status: response.status, headers: { "Content-Type": "application/json" } }
     );
   }
 
   const data = await response.json();
-  const rawText: string =
-    data.content?.find((block: { type: string }) => block.type === "text")
-      ?.text ?? "";
+  const rawText: string = data.choices?.[0]?.message?.content ?? "";
 
   const parsed = extractJson(rawText) ?? {
     reply: rawText || "No pude generar una respuesta, ¿podés repetirlo?",
