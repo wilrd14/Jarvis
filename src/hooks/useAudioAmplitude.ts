@@ -1,6 +1,27 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+
+/** Cola de audio por Web Audio: cada frase se programa justo al terminar la anterior (sin huecos). */
+interface QueueStream {
+  nextTime: number;
+  sources: Set<AudioBufferSourceNode>;
+  pending: number;
+  inputDone: boolean;
+  finished: boolean;
+  onEnded: (reason: "ended" | "cancelled") => void;
+}
+
+export interface AudioQueue {
+  /** Empieza una cola nueva (detiene lo que sonara). `onEnded` se llama una sola vez. */
+  begin: (onEnded: (reason: "ended" | "cancelled") => void) => void;
+  /** Decodifica y encadena un audio (WAV/MP3). Devuelve false si no se pudo decodificar. */
+  push: (data: ArrayBuffer) => Promise<boolean>;
+  /** No llegarán más audios: la cola termina cuando suene el último. */
+  end: () => void;
+  /** Corta el audio y cancela la cola. */
+  cancel: () => void;
+}
 
 export function useAudioAmplitude() {
   const [amplitude, setAmplitude] = useState(0);
@@ -8,13 +29,61 @@ export function useAudioAmplitude() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const queueRef = useRef<QueueStream | null>(null);
 
-  const stop = useCallback(() => {
+  const getCtx = useCallback(() => {
+    if (!audioCtxRef.current) {
+      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioCtxRef.current = new Ctx();
+    }
+    const ctx = audioCtxRef.current;
+    // Chrome crea el contexto suspendido si no hubo gesto reciente: sin esto no suena nada.
+    if (ctx.state === "suspended") void ctx.resume();
+    return ctx;
+  }, []);
+
+  const stopTick = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
-    audioElRef.current?.pause();
-    setAmplitude(0);
   }, []);
+
+  const startTick = useCallback((analyser: AnalyserNode) => {
+    analyserRef.current = analyser;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    function tick() {
+      const analyserNode = analyserRef.current;
+      if (!analyserNode) return;
+      analyserNode.getByteFrequencyData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i];
+      setAmplitude(sum / data.length / 255);
+      rafRef.current = requestAnimationFrame(tick);
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  const stop = useCallback(() => {
+    stopTick();
+    audioElRef.current?.pause();
+    const q = queueRef.current;
+    if (q) {
+      queueRef.current = null;
+      if (!q.finished) {
+        q.finished = true;
+        for (const s of q.sources) {
+          s.onended = null;
+          try {
+            s.stop();
+          } catch {
+            /* ya terminado */
+          }
+        }
+        q.sources.clear();
+        q.onEnded("cancelled");
+      }
+    }
+    setAmplitude(0);
+  }, [stopTick]);
 
   const playWithAmplitude = useCallback((audioUrl: string, onEnded?: () => void) => {
     stop();
@@ -22,32 +91,12 @@ export function useAudioAmplitude() {
     const audio = new Audio(audioUrl);
     audioElRef.current = audio;
 
-    if (!audioCtxRef.current) {
-      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      audioCtxRef.current = new Ctx();
-    }
-    const audioCtx = audioCtxRef.current;
-    // Chrome crea el contexto suspendido si no hubo gesto reciente: sin esto no suena nada.
-    if (audioCtx.state === "suspended") void audioCtx.resume();
+    const audioCtx = getCtx();
     const source = audioCtx.createMediaElementSource(audio);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
     source.connect(analyser);
     analyser.connect(audioCtx.destination);
-    analyserRef.current = analyser;
-
-    const data = new Uint8Array(analyser.frequencyBinCount);
-
-    function tick() {
-      const analyserNode = analyserRef.current;
-      if (!analyserNode) return;
-      analyserNode.getByteFrequencyData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i++) sum += data[i];
-      const avg = sum / data.length / 255;
-      setAmplitude(avg);
-      rafRef.current = requestAnimationFrame(tick);
-    }
 
     audio.onended = () => {
       stop();
@@ -63,8 +112,71 @@ export function useAudioAmplitude() {
       stop();
       onEnded?.();
     });
-    rafRef.current = requestAnimationFrame(tick);
-  }, [stop]);
+    startTick(analyser);
+  }, [stop, getCtx, startTick]);
 
-  return { amplitude, playWithAmplitude, stop };
+  const finishIfIdle = useCallback((q: QueueStream) => {
+    if (q.finished || !q.inputDone || q.pending > 0 || q.sources.size > 0) return;
+    q.finished = true;
+    if (queueRef.current === q) queueRef.current = null;
+    stopTick();
+    setAmplitude(0);
+    q.onEnded("ended");
+  }, [stopTick]);
+
+  const queue = useMemo<AudioQueue>(() => ({
+    begin: (onEnded) => {
+      stop();
+      const ctx = getCtx();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.connect(ctx.destination);
+      queueRef.current = {
+        nextTime: 0,
+        sources: new Set(),
+        pending: 0,
+        inputDone: false,
+        finished: false,
+        onEnded,
+      };
+      startTick(analyser); // la animación sigue viva durante toda la cola, también entre frases
+    },
+    push: async (data) => {
+      const q = queueRef.current;
+      const analyser = analyserRef.current;
+      if (!q || q.finished || !analyser) return false;
+      const ctx = getCtx();
+      q.pending++;
+      try {
+        const buffer = await ctx.decodeAudioData(data);
+        if (queueRef.current !== q || q.finished) return false;
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(analyser);
+        const at = Math.max(ctx.currentTime + 0.02, q.nextTime);
+        q.nextTime = at + buffer.duration;
+        q.sources.add(src);
+        src.onended = () => {
+          q.sources.delete(src);
+          finishIfIdle(q);
+        };
+        src.start(at);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        q.pending--;
+        finishIfIdle(q);
+      }
+    },
+    end: () => {
+      const q = queueRef.current;
+      if (!q) return;
+      q.inputDone = true;
+      finishIfIdle(q);
+    },
+    cancel: stop,
+  }), [stop, getCtx, startTick, finishIfIdle]);
+
+  return { amplitude, playWithAmplitude, stop, queue };
 }

@@ -99,7 +99,9 @@ async function speakWithElevenLabs(text: string, apiKey: string, voiceId: string
 export async function POST(req: Request) {
   const blocked = rejectForeignRequest(req);
   if (blocked) return blocked;
-  if (!rateLimit("speak", 30)) return tooMany();
+  // Con voz en streaming cada turno pide una síntesis por frase (hasta ~8): el tope por minuto
+  // es mayor que el del cerebro (30 turnos/min) sin dejar de proteger el saldo.
+  if (!rateLimit("speak", 120)) return tooMany();
   const overBudget = await rejectIfOverBudget();
   if (overBudget) return overBudget;
 

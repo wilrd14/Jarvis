@@ -23,6 +23,8 @@ export interface Settings {
   city: string;
   /** Lanzar el resumen del día al abrir Jarvis por primera vez cada mañana. */
   morningBriefing: boolean;
+  /** Jarvis empieza a hablar mientras el cerebro aún escribe la respuesta (voz por frases). */
+  streamingVoice: boolean;
 }
 
 export type SettingName = keyof Settings;
@@ -41,6 +43,7 @@ export const DEFAULTS: Settings = {
   blockOnBudget: false,
   city: "Buenos Aires",
   morningBriefing: false,
+  streamingVoice: true,
 };
 
 const ENV_NAMES: Partial<Record<SettingName, string>> = {
@@ -61,7 +64,7 @@ function settingsFile(): string {
 }
 
 const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel", "visionModel"] as const;
-const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing"] as const;
+const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "streamingVoice"] as const;
 
 // Valida un objeto arbitrario: devuelve solo los campos válidos (los demás se ignoran).
 export function sanitize(input: unknown): Partial<Settings> {

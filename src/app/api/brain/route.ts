@@ -5,6 +5,7 @@ import { recordUsage, rejectIfOverBudget } from "@/lib/usage.server";
 import { LIMITS, jsonResponse, rejectForeignRequest, providerError, rateLimit, tooMany } from "@/lib/guard";
 import { signProposal } from "@/lib/proposals.server";
 import { buildActionsPrompt, getActionDefinition, parseAction, type AssistantAction } from "@/lib/actions";
+import { ReplyStream, SentenceSplitter } from "@/lib/replystream";
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -14,6 +15,8 @@ interface ChatTurn {
 interface BrainRequestBody {
   message: string;
   history?: ChatTurn[];
+  /** true: responde como eventos SSE (sentence* y done) para empezar a hablar antes de terminar. */
+  stream?: boolean;
 }
 
 interface BrainResponseBody {
@@ -30,9 +33,10 @@ Cuando ${USER_NAME} te pida enviar un correo o crear un evento de calendario, NO
 
 Debes responder EXCLUSIVAMENTE con un objeto JSON válido, sin texto adicional ni markdown, con esta forma exacta:
 {
-  "reply": "texto que Jarvis dice en voz alta",
-  "action": null
+  "action": null,
+  "reply": "texto que Jarvis dice en voz alta"
 }
+Escribe las claves siempre en este orden: primero "action", luego "search" (solo si hace falta) y por último "reply". Así tu respuesta empieza a oírse antes de que termines de escribirla.
 
 ${buildActionsPrompt()}
 
@@ -104,6 +108,7 @@ export async function POST(req: Request) {
     .map((t) => ({ role: t.role, content: t.content.slice(0, LIMITS.historyItemChars) }));
 
   const model = getSetting("model");
+  if (body?.stream === true) return streamBrain(req, { apiKey, model, history: recent, message });
   let response: Response;
   try {
     response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -144,14 +149,22 @@ export async function POST(req: Request) {
     action: null,
   };
 
+  return jsonResponse(await finishTurn(parsed, { apiKey, model, history: recent, message }));
+}
+
+/** Cierra el turno: segundo paso de búsqueda web si hace falta y firma de acciones con confirmación. */
+async function finishTurn(
+  parsed: BrainResponseBody,
+  ctx: { apiKey: string; model: string; history: ChatTurn[]; message: string },
+) {
   // Segundo paso solo si el cerebro pidió datos actuales.
   if (parsed.search && !parsed.action) {
     const web = await answerWithWebSearch({
-      apiKey,
-      model,
+      apiKey: ctx.apiKey,
+      model: ctx.model,
       system: buildSystemPrompt(),
-      history: recent,
-      message,
+      history: ctx.history,
+      message: ctx.message,
       query: parsed.search,
     }).catch(() => null);
     if (web) {
@@ -170,5 +183,172 @@ export async function POST(req: Request) {
       ? signProposal(parsed.action)
       : undefined;
 
-  return jsonResponse({ ...parsed, actionToken });
+  return { ...parsed, actionToken };
+}
+
+const encoder = new TextEncoder();
+const sse = (event: string, data: unknown) =>
+  encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+
+/** ¿Se puede hablar la respuesta en cuanto llega? Solo sin acción o con una que pide confirmación. */
+function speakableAction(rawAction: string | undefined): boolean {
+  if (rawAction === undefined) return true;
+  try {
+    const action = parseAction(JSON.parse(rawAction));
+    return !action || getActionDefinition(action.type)?.risk === "confirm";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Modo streaming: consume el stream de OpenRouter y emite eventos SSE.
+ *  - `sentence` {text,index}: cada frase completa del campo "reply", en cuanto está lista.
+ *  - `done` {reply, action, actionToken, sources, streamed}: igual que la respuesta JSON normal.
+ *  - `error` {error}: fallo a mitad (el cliente cae al modo normal si aún no habló nada).
+ * Con búsqueda web o con acciones que se ejecutan solas no se emiten frases: solo `done`.
+ */
+function streamBrain(
+  req: Request,
+  ctx: { apiKey: string; model: string; history: ChatTurn[]; message: string },
+): Response {
+  const signal = AbortSignal.any([req.signal, AbortSignal.timeout(90_000)]);
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let cost: unknown;
+      let recorded = false;
+      const record = () => {
+        if (recorded) return;
+        recorded = true;
+        recordUsage("brain", cost);
+      };
+      const emit = (event: string, data: unknown) => {
+        try {
+          controller.enqueue(sse(event, data));
+        } catch {
+          /* cliente desconectado */
+        }
+      };
+      try {
+        const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${ctx.apiKey}`, "Content-Type": "application/json" },
+          signal,
+          body: JSON.stringify({
+            model: ctx.model,
+            max_tokens: 2500,
+            stream: true,
+            messages: [
+              { role: "system", content: buildSystemPrompt() },
+              ...ctx.history,
+              { role: "user", content: ctx.message },
+            ],
+          }),
+        });
+        if (!upstream.ok || !upstream.body) {
+          console.error(`[OpenRouter] stream error ${upstream.status}: ${(await upstream.text()).slice(0, 500)}`);
+          emit("error", { error: `El servicio de OpenRouter no respondió bien (código ${upstream.status}).` });
+          return;
+        }
+
+        const rs = new ReplyStream();
+        const splitter = new SentenceSplitter();
+        let rawText = "";
+        let gate: "wait" | "open" | "closed" = "wait";
+        let held: string[] = [];
+        let index = 0;
+        const send = (sentences: string[]) => {
+          for (const text of sentences) emit("sentence", { text, index: index++ });
+        };
+        const route = (sentences: string[]) => {
+          if (!sentences.length) return;
+          if (gate === "open") send(sentences);
+          else if (gate === "wait") held.push(...sentences);
+        };
+        const updateGate = (final: boolean) => {
+          if (gate !== "wait") return;
+          const search = rs.values.search;
+          if (search !== undefined && search !== "null" && search !== '""') {
+            gate = "closed";
+            held = [];
+            return;
+          }
+          const actionKnown = "action" in rs.values;
+          if (!((rs.replyStarted && actionKnown) || rs.objectDone || final)) return;
+          if (speakableAction(rs.values.action)) {
+            gate = "open";
+            send(held);
+          } else {
+            gate = "closed";
+          }
+          held = [];
+        };
+
+        const reader = upstream.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        const handleLine = (line: string) => {
+          if (!line.startsWith("data:")) return; // comentarios (": OPENROUTER PROCESSING") y vacías
+          const payload = line.slice(5).trim();
+          if (!payload || payload === "[DONE]") return;
+          let chunk: { choices?: { delta?: { content?: unknown } }[]; usage?: { cost?: unknown }; error?: unknown };
+          try {
+            chunk = JSON.parse(payload);
+          } catch {
+            return;
+          }
+          if (chunk.error) throw new Error("stream error");
+          if (chunk.usage && chunk.usage.cost !== undefined) cost = chunk.usage.cost;
+          const piece = chunk.choices?.[0]?.delta?.content;
+          if (typeof piece !== "string" || !piece) return;
+          rawText += piece;
+          const text = rs.push(piece);
+          updateGate(false);
+          if (text) route(splitter.push(text));
+          updateGate(false);
+        };
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let nl: number;
+          while ((nl = buf.indexOf("\n")) >= 0) {
+            handleLine(buf.slice(0, nl).replace(/\r$/, ""));
+            buf = buf.slice(nl + 1);
+          }
+        }
+        if (buf) handleLine(buf.replace(/\r$/, ""));
+        record();
+
+        updateGate(true);
+        route(splitter.flush());
+
+        const parsed: BrainResponseBody = extractJson(rawText) ??
+          (rs.replyStarted && rs.reply.trim()
+            ? { reply: rs.reply, action: null }
+            : { reply: rawText || "No pude generar una respuesta, ¿podés repetirlo?", action: null });
+        const result = await finishTurn(parsed, ctx);
+        emit("done", { ...result, streamed: index });
+      } catch (err) {
+        if (!req.signal.aborted) {
+          console.error("[brain] fallo en el stream:", err instanceof Error ? err.message : err);
+          emit("error", { error: "Se cortó la respuesta de Jarvis. Inténtalo de nuevo." });
+        }
+      } finally {
+        record();
+        try {
+          controller.close();
+        } catch {
+          /* ya cerrado */
+        }
+      }
+    },
+  });
+  return new Response(body, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
