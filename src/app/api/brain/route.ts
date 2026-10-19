@@ -8,6 +8,7 @@ import { signProposal } from "@/lib/proposals.server";
 import { buildActionsPrompt, getActionDefinition, parseAction, type AssistantAction } from "@/lib/actions";
 import { ReplyStream, SentenceSplitter } from "@/lib/replystream";
 import { chooseModel, fetchWithModelFallback } from "@/lib/modelrouter";
+import { localCommandResponse } from "@/lib/localcommands.server";
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -73,9 +74,6 @@ function extractJson(text: string): BrainResponseBody | null {
 export async function POST(req: Request) {
   const blocked = rejectForeignRequest(req);
   if (blocked) return blocked;
-  if (!rateLimit("brain", 30)) return tooMany();
-  const overBudget = await rejectIfOverBudget();
-  if (overBudget) return overBudget;
 
   let body: Partial<BrainRequestBody> | null;
   try {
@@ -92,6 +90,15 @@ export async function POST(req: Request) {
   if (message.length > LIMITS.messageChars) {
     return jsonResponse({ error: "El mensaje es demasiado largo." }, 413);
   }
+
+  // Órdenes instantáneas sin IA ("sube el volumen", "qué hora es"...): antes del límite del cerebro, del
+  // tope de gasto y de la API key, porque no gastan nada y deben funcionar sin crédito ni key.
+  const local = localCommandResponse(message, body?.stream === true);
+  if (local) return local;
+
+  if (!rateLimit("brain", 30)) return tooMany();
+  const overBudget = await rejectIfOverBudget();
+  if (overBudget) return overBudget;
 
   const apiKey = getSetting("openrouterApiKey");
   if (!apiKey) {
