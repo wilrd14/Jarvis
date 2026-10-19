@@ -8,12 +8,19 @@ export type ActionRisk = "low" | "confirm";
 export interface ServerActionResult {
   ok: boolean;
   message?: string;
+  /** Texto que vuelve al cerebro como siguiente turno (ya acotado y etiquetado). */
+  followUp?: string;
+}
+
+/** Resultado opcional de una acción de cliente. */
+export interface ClientActionOutcome {
+  followUp?: string;
 }
 
 /** Ejecución en el navegador (mailto:, window.open, ...). */
 export interface ClientExecution<T> {
   kind: "client";
-  run: (action: T) => void | Promise<void>;
+  run: (action: T) => void | ClientActionOutcome | Promise<void | ClientActionOutcome>;
 }
 
 /**

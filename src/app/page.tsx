@@ -6,7 +6,7 @@ import HologramCore, { AssistantState } from "@/components/HologramCore";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { useAudioAmplitude } from "@/hooks/useAudioAmplitude";
 import { ASSISTANT_NAME, USER_NAME } from "@/lib/config";
-import type { AssistantAction } from "@/lib/actions";
+import { isAutoRun, runAssistantAction, type AssistantAction } from "@/lib/actions";
 import ActionCard from "@/components/ActionCard";
 
 const STATE_LABEL: Record<AssistantState, string> = {
@@ -25,6 +25,7 @@ export default function Home() {
     `Hola ${USER_NAME}, soy ${ASSISTANT_NAME}. Toca el micrófono para hablarme.`
   );
   const [pendingAction, setPendingAction] = useState<AssistantAction | null>(null);
+  const [sources, setSources] = useState<{ title: string; url: string }[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [textInput, setTextInput] = useState("");
   const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
@@ -62,28 +63,44 @@ export default function Home() {
     }
     setState("processing");
     setErrorMsg(null);
+    setSources([]);
     try {
-      const res = await fetch("/api/brain", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history: historyRef.current }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Error al pensar la respuesta.");
-      }
-      const data = await res.json();
-      historyRef.current = [
-        ...historyRef.current,
-        { role: "user" as const, content: text },
-        { role: "assistant" as const, content: data.reply },
-      ].slice(-12);
-      setLastReply(data.reply);
-      setPendingAction(data.action ?? null);
-      if (VOICE_OUTPUT_ENABLED) {
-        await speak(data.reply);
-      } else {
-        setState("idle");
+      // Hasta 2 vueltas: una acción de riesgo bajo (p. ej. buscar archivos) se ejecuta
+      // sola y su resultado vuelve al cerebro como siguiente turno.
+      for (let turn = 0; turn < 2; turn++) {
+        const res = await fetch("/api/brain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, history: historyRef.current }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error ?? "Error al pensar la respuesta.");
+        }
+        const data = await res.json();
+        historyRef.current = [
+          ...historyRef.current,
+          { role: "user" as const, content: text },
+          { role: "assistant" as const, content: data.reply },
+        ].slice(-12);
+        setLastReply(data.reply);
+        setSources(Array.isArray(data.sources) ? data.sources : []);
+
+        const action: AssistantAction | null = data.action ?? null;
+        if (action && turn === 0 && isAutoRun(action)) {
+          const out = await runAssistantAction(action);
+          if (out.followUp) {
+            text = out.followUp;
+            continue;
+          }
+        }
+        setPendingAction(action);
+        if (VOICE_OUTPUT_ENABLED) {
+          await speak(data.reply);
+        } else {
+          setState("idle");
+        }
+        return;
       }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Algo salió mal.");
@@ -154,13 +171,39 @@ export default function Home() {
           </motion.p>
         </AnimatePresence>
 
+        {sources.length > 0 && (
+          <p className="max-w-md text-center text-[11px] text-foreground/40">
+            Fuentes:{" "}
+            {sources.map((s, i) => (
+              <span key={s.url}>
+                {i > 0 && " · "}
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-foreground/70"
+                >
+                  {s.title.length > 40 ? `${s.title.slice(0, 40)}…` : s.title}
+                </a>
+              </span>
+            ))}
+          </p>
+        )}
+
         {shownError && (
           <p className="max-w-md text-center text-sm text-accent-spark/80">{shownError}</p>
         )}
 
         <AnimatePresence>
           {pendingAction && (
-            <ActionCard action={pendingAction} onDone={() => setPendingAction(null)} />
+            <ActionCard
+              action={pendingAction}
+              onDone={(followUp) => {
+                setPendingAction(null);
+                // El resultado (portapapeles, archivos) vuelve al cerebro como siguiente turno.
+                if (followUp) handleFinalTranscript(followUp);
+              }}
+            />
           )}
         </AnimatePresence>
       </div>

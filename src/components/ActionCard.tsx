@@ -7,7 +7,7 @@ import { describeAction, runAssistantAction, type AssistantAction } from "@/lib/
 interface ActionCardProps {
   action: AssistantAction;
   /** Se llama tras ejecutar la acción con éxito. */
-  onDone: () => void;
+  onDone: (followUp?: string) => void;
 }
 
 export default function ActionCard({ action, onDone }: ActionCardProps) {
@@ -19,8 +19,8 @@ export default function ActionCard({ action, onDone }: ActionCardProps) {
     setBusy(true);
     setError(null);
     try {
-      await runAssistantAction(action);
-      onDone();
+      const out = await runAssistantAction(action);
+      onDone(out.followUp);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo ejecutar la acción.");
       setBusy(false);
