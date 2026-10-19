@@ -7,6 +7,7 @@ import BriefingSettings from "./BriefingSettings";
 import MemorySettings from "./MemorySettings";
 import ModelRoutingSettings from "./ModelRoutingSettings";
 import StreamingVoiceSettings from "./StreamingVoiceSettings";
+import VoiceCostSettings from "./VoiceCostSettings";
 
 // Lo que devuelve GET /api/settings (nunca incluye la key completa).
 export interface PublicSettings {
@@ -390,6 +391,11 @@ function SettingsForm({
 
           <StreamingVoiceSettings streamingVoice={streamingVoice} onChange={setStreamingVoice} />
           <ModelRoutingSettings />
+          <VoiceCostSettings
+            ttsModel={voiceChoice === CUSTOM ? customTts.model : VOICES[Number(voiceChoice)].model}
+            ttsVoice={voiceChoice === CUSTOM ? customTts.voice : VOICES[Number(voiceChoice)].voice}
+            onPick={(m, v) => { setCustomTts({ model: m, voice: v }); setVoiceChoice(CUSTOM); }}
+          />
           <BudgetSettings />
           <MemorySettings />
           <BriefingSettings city={city} morningBriefing={morningBriefing} onCity={setCity} onMorningBriefing={setMorningBriefing} />

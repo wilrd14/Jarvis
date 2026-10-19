@@ -33,6 +33,8 @@ export interface Settings {
   fastModel: string;
   /** Tope de tokens de la respuesta del cerebro (tambien es lo que OpenRouter reserva del saldo). */
   brainMaxTokens: number;
+  /** Guardar en disco el audio de frases cortas para no pagar dos veces por la misma. */
+  ttsCache: boolean;
 }
 
 export type SettingName = keyof Settings;
@@ -56,6 +58,7 @@ export const DEFAULTS: Settings = {
   modelStrategy: "auto",
   fastModel: "anthropic/claude-haiku-5.5",
   brainMaxTokens: 2500,
+  ttsCache: true,
 };
 
 const ENV_NAMES: Partial<Record<SettingName, string>> = {
@@ -77,7 +80,7 @@ function settingsFile(): string {
 }
 
 const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel", "visionModel", "fastModel"] as const;
-const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled", "streamingVoice"] as const;
+const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled", "streamingVoice", "ttsCache"] as const;
 
 // Valida un objeto arbitrario: devuelve solo los campos válidos (los demás se ignoran).
 export function sanitize(input: unknown): Partial<Settings> {

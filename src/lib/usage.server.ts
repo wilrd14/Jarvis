@@ -35,6 +35,7 @@ interface State {
   warned: boolean;
   /** Gasto de la sesion por modelo (solo llamadas que lo informan, p. ej. el cerebro). */
   byModel?: Record<string, KindTotals>;
+  voiceCacheHits?: number;
 }
 
 // globalThis: las rutas pueden cargarse en módulos separados y deben compartir el mismo estado.
@@ -65,12 +66,23 @@ export function recordUsage(kind: UsageKind, cost?: unknown, model?: string) {
   }
 }
 
+/** Acierto de la caché de voz: no hay llamada al proveedor ni coste; se cuenta aparte. */
+export function recordCacheHit() {
+  state.voiceCacheHits = (state.voiceCacheHits ?? 0) + 1;
+}
+
 export function sessionUsage() {
   const total = Object.values(state.session).reduce(
     (a, t) => ({ calls: a.calls + t.calls, costUsd: a.costUsd + t.costUsd }),
     { calls: 0, costUsd: 0 },
   );
-  return { since: state.sessionStart, byKind: { ...state.session }, byModel: { ...(state.byModel ?? {}) }, total };
+  return {
+    since: state.sessionStart,
+    byKind: { ...state.session },
+    byModel: { ...(state.byModel ?? {}) },
+    total,
+    voiceCacheHits: state.voiceCacheHits ?? 0,
+  };
 }
 
 function sessionCost() {
