@@ -49,3 +49,6 @@ cloudflare-env.d.ts
 # worktrees de subagentes y logs locales
 .claude/
 dev.log
+
+# electron
+/release/

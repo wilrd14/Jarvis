@@ -1,11 +1,10 @@
 import type { NextConfig } from "next";
+import path from "node:path";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Servidor autocontenido para empaquetar con Electron.
+  output: "standalone",
+  outputFileTracingRoot: path.resolve(import.meta.dirname),
 };
 
 export default nextConfig;
-
-// Enables Cloudflare bindings/env vars during `next dev`.
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
-initOpenNextCloudflareForDev();
