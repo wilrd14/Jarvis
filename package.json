@@ -11,7 +11,8 @@
     "electron:prepare": "node electron/prepare.cjs",
     "electron:start": "electron .",
     "electron:build": "next build && node electron/prepare.cjs && electron-builder --win dir --x64",
-    "dist": "next build && node electron/prepare.cjs && electron-builder --win nsis portable --x64"
+    "dist": "next build && node electron/prepare.cjs && electron-builder --win nsis portable --x64",
+    "app:install": "next build && node electron/prepare.cjs && node scripts/desktop/make-ico.cjs && node scripts/desktop/seed-settings.cjs && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/desktop/install.ps1"
   },
   "main": "electron/main.cjs",
   "description": "Jarvis, asistente de voz en español",
