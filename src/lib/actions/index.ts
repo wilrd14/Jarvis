@@ -13,13 +13,20 @@
  */
 import { calendarAction } from "./calendar";
 import { emailAction } from "./email";
+import { lockScreenAction } from "./lock-screen";
+import { openAppAction } from "./open-app";
+import { openFolderAction } from "./open-folder";
+import { openUrlAction } from "./open-url";
+import { screenshotAction } from "./screenshot";
+import { volumeAction } from "./volume";
 import type { ActionDefinition } from "./types";
 
 export type { ActionDefinition, ActionRisk, ServerActionResult } from "./types";
 export type { EmailAction } from "./email";
 export type { CalendarAction } from "./calendar";
 
-const ACTION_DEFINITIONS = [emailAction, calendarAction] as const;
+const PC_CONTROL_ACTIONS = [openAppAction, openFolderAction, openUrlAction, volumeAction, lockScreenAction, screenshotAction] as const;
+const ACTION_DEFINITIONS = [emailAction, calendarAction, ...PC_CONTROL_ACTIONS] as const;
 
 /** Unión discriminada por `type`, derivada del registro. */
 export type AssistantAction = NonNullable<
