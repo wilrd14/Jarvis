@@ -1,5 +1,6 @@
 import { getSetting } from "@/lib/settings";
-import { recordUsage, rejectIfOverBudget } from "@/lib/usage.server";
+import { recordCacheHit, recordUsage, rejectIfOverBudget } from "@/lib/usage.server";
+import { speakCached } from "@/lib/tts.server";
 import { LIMITS, providerError, rateLimit, rejectForeignRequest, tooMany } from "@/lib/guard";
 
 const json = (body: unknown, status: number) =>
@@ -8,61 +9,20 @@ const json = (body: unknown, status: number) =>
     headers: { "Content-Type": "application/json" },
   });
 
-// OpenRouter devuelve PCM16 mono a 24 kHz; lo envolvemos en WAV para el navegador.
-function pcm16ToWav(pcm: Uint8Array, sampleRate = 24000): Uint8Array {
-  const header = new ArrayBuffer(44);
-  const v = new DataView(header);
-  const str = (o: number, s: string) =>
-    [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
-  str(0, "RIFF");
-  v.setUint32(4, 36 + pcm.length, true);
-  str(8, "WAVE");
-  str(12, "fmt ");
-  v.setUint32(16, 16, true);
-  v.setUint16(20, 1, true);
-  v.setUint16(22, 1, true);
-  v.setUint32(24, sampleRate, true);
-  v.setUint32(28, sampleRate * 2, true);
-  v.setUint16(32, 2, true);
-  v.setUint16(34, 16, true);
-  str(36, "data");
-  v.setUint32(40, pcm.length, true);
-  const out = new Uint8Array(44 + pcm.length);
-  out.set(new Uint8Array(header), 0);
-  out.set(pcm, 44);
-  return out;
-}
-
 async function speakWithOpenRouter(text: string, apiKey: string) {
-  // Modelo TTS dedicado: lee el texto tal cual, sin reinterpretarlo.
-  const response = await fetch("https://openrouter.ai/api/v1/audio/speech", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    signal: AbortSignal.timeout(45_000),
-    body: JSON.stringify({
-      model: getSetting("ttsModel"),
-      voice: getSetting("ttsVoice"),
-      input: text,
-      response_format: "pcm",
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    return providerError("OpenRouter", response.status || 502, errorText);
+  const { result, cache } = await speakCached(text, apiKey);
+  if (!result.ok) {
+    if (result.message) {
+      console.error(`[OpenRouter] voz error ${result.status}: ${result.detail.slice(0, 300)}`);
+      return json({ error: result.message }, result.status >= 400 && result.status < 600 ? result.status : 502);
+    }
+    return providerError("OpenRouter", result.status, result.detail);
   }
-
-  // El content-type indica la frecuencia, p. ej. "audio/pcm;rate=24000;channels=1".
-  const rate = Number(response.headers.get("content-type")?.match(/rate=(\d+)/)?.[1]) || 24000;
-  const pcm = new Uint8Array(await response.arrayBuffer());
-  if (!pcm.length) return json({ error: "OpenRouter no devolvió audio." }, 502);
-  recordUsage("voice"); // audio/speech no devuelve coste: solo se cuenta la llamada
-
-  return new Response(pcm16ToWav(pcm, rate) as BodyInit, {
-    headers: { "Content-Type": "audio/wav" },
+  // audio/speech no devuelve coste: solo se cuenta la llamada. Un acierto de caché no llamó a nadie.
+  if (cache === "hit") recordCacheHit();
+  else recordUsage("voice");
+  return new Response(result.audio as BodyInit, {
+    headers: { "Content-Type": result.contentType, "X-Jarvis-Cache": cache },
   });
 }
 

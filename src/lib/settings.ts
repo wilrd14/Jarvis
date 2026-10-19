@@ -27,6 +27,8 @@ export interface Settings {
   memoryEnabled: boolean;
   /** Jarvis empieza a hablar mientras el cerebro aún escribe la respuesta (voz por frases). */
   streamingVoice: boolean;
+  /** Guardar en disco el audio de frases cortas para no pagar dos veces por la misma. */
+  ttsCache: boolean;
 }
 
 export type SettingName = keyof Settings;
@@ -47,6 +49,7 @@ export const DEFAULTS: Settings = {
   morningBriefing: false,
   memoryEnabled: true,
   streamingVoice: true,
+  ttsCache: true,
 };
 
 const ENV_NAMES: Partial<Record<SettingName, string>> = {
@@ -67,7 +70,7 @@ function settingsFile(): string {
 }
 
 const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel", "visionModel"] as const;
-const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled", "streamingVoice"] as const;
+const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled", "streamingVoice", "ttsCache"] as const;
 
 // Valida un objeto arbitrario: devuelve solo los campos válidos (los demás se ignoran).
 export function sanitize(input: unknown): Partial<Settings> {

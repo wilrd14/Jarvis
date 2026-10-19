@@ -33,6 +33,7 @@ interface State {
   cache: { key: string; data: RemoteUsage; costAtFetch: number } | null;
   inflight: Promise<RemoteUsage | null> | null;
   warned: boolean;
+  voiceCacheHits?: number;
 }
 
 // globalThis: las rutas pueden cargarse en módulos separados y deben compartir el mismo estado.
@@ -57,12 +58,17 @@ export function recordUsage(kind: UsageKind, cost?: unknown) {
   if (typeof cost === "number" && Number.isFinite(cost) && cost > 0) t.costUsd += cost;
 }
 
+/** Acierto de la caché de voz: no hay llamada al proveedor ni coste; se cuenta aparte. */
+export function recordCacheHit() {
+  state.voiceCacheHits = (state.voiceCacheHits ?? 0) + 1;
+}
+
 export function sessionUsage() {
   const total = Object.values(state.session).reduce(
     (a, t) => ({ calls: a.calls + t.calls, costUsd: a.costUsd + t.costUsd }),
     { calls: 0, costUsd: 0 },
   );
-  return { since: state.sessionStart, byKind: { ...state.session }, total };
+  return { since: state.sessionStart, byKind: { ...state.session }, total, voiceCacheHits: state.voiceCacheHits ?? 0 };
 }
 
 function sessionCost() {
