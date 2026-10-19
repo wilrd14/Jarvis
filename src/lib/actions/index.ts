@@ -13,13 +13,14 @@
  */
 import { calendarAction } from "./calendar";
 import { emailAction } from "./email";
+import { productivityActions } from "./productivity";
 import type { ActionDefinition } from "./types";
 
 export type { ActionDefinition, ActionRisk, ServerActionResult } from "./types";
 export type { EmailAction } from "./email";
 export type { CalendarAction } from "./calendar";
 
-const ACTION_DEFINITIONS = [emailAction, calendarAction] as const;
+const ACTION_DEFINITIONS = [emailAction, calendarAction, ...productivityActions] as const;
 
 /** Unión discriminada por `type`, derivada del registro. */
 export type AssistantAction = NonNullable<
@@ -58,12 +59,12 @@ Con una acción, el JSON completo es {"reply": "...", "action": <objeto>}. Si no
 }
 
 /** Ejecuta una acción ya confirmada: en el navegador o vía la ruta del servidor. */
-export async function runAssistantAction(action: AssistantAction): Promise<void> {
+export async function runAssistantAction(action: AssistantAction): Promise<string | undefined> {
   const def = REGISTRY.get(action.type);
   if (!def) throw new Error("Acción desconocida.");
   if (def.execution.kind === "client") {
     await def.execution.run(action);
-    return;
+    return undefined;
   }
   const res = await fetch("/api/actions/execute", {
     method: "POST",
@@ -74,4 +75,11 @@ export async function runAssistantAction(action: AssistantAction): Promise<void>
   if (!res.ok || !data?.ok) {
     throw new Error(data?.error ?? data?.message ?? "No se pudo ejecutar la acción.");
   }
+  return typeof data.message === "string" ? data.message : undefined;
+}
+
+/** Acciones inocuas de servidor (notas, recordatorios...): se ejecutan sin tarjeta de confirmación. */
+export function isAutoRunAction(action: AssistantAction): boolean {
+  const def = REGISTRY.get(action.type);
+  return !!def && def.risk === "low" && def.execution.kind === "server";
 }

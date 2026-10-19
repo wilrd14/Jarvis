@@ -1,0 +1,17 @@
+import { takeDue } from "@/lib/store/reminders";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Entrega los recordatorios/temporizadores/alarmas vencidos y los marca como
+ * disparados, así que cada uno se devuelve una sola vez. Los que vencieron con
+ * la app apagada salen en la primera consulta.
+ */
+export async function GET() {
+  try {
+    const due = await takeDue();
+    return Response.json({ due }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return Response.json({ due: [], error: "No se pudo leer los recordatorios." }, { status: 500 });
+  }
+}

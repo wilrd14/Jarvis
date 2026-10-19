@@ -6,7 +6,8 @@ import HologramCore, { AssistantState } from "@/components/HologramCore";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { useAudioAmplitude } from "@/hooks/useAudioAmplitude";
 import { ASSISTANT_NAME, USER_NAME } from "@/lib/config";
-import type { AssistantAction } from "@/lib/actions";
+import { isAutoRunAction, runAssistantAction, type AssistantAction } from "@/lib/actions";
+import { useReminders } from "@/hooks/useReminders";
 import ActionCard from "@/components/ActionCard";
 
 const STATE_LABEL: Record<AssistantState, string> = {
@@ -73,15 +74,26 @@ export default function Home() {
         throw new Error(data?.error ?? "Error al pensar la respuesta.");
       }
       const data = await res.json();
+      // Acciones inocuas (notas, recordatorios...): se ejecutan al instante y Jarvis dice el resultado.
+      let reply: string = data.reply;
+      let action: AssistantAction | null = data.action ?? null;
+      if (action && isAutoRunAction(action)) {
+        try {
+          reply = (await runAssistantAction(action)) ?? reply;
+        } catch (err) {
+          reply = err instanceof Error ? err.message : reply;
+        }
+        action = null;
+      }
       historyRef.current = [
         ...historyRef.current,
         { role: "user" as const, content: text },
-        { role: "assistant" as const, content: data.reply },
+        { role: "assistant" as const, content: reply },
       ].slice(-12);
-      setLastReply(data.reply);
-      setPendingAction(data.action ?? null);
+      setLastReply(reply);
+      setPendingAction(action);
       if (VOICE_OUTPUT_ENABLED) {
-        await speak(data.reply);
+        await speak(reply);
       } else {
         setState("idle");
       }
@@ -90,6 +102,8 @@ export default function Home() {
       setState("idle");
     }
   }, [speak]);
+
+  useReminders(speak);
 
   const voice = useVoiceInput(handleFinalTranscript);
   const isListening = voice.status === "listening";
@@ -160,7 +174,13 @@ export default function Home() {
 
         <AnimatePresence>
           {pendingAction && (
-            <ActionCard action={pendingAction} onDone={() => setPendingAction(null)} />
+            <ActionCard action={pendingAction} onDone={(message) => {
+                setPendingAction(null);
+                if (message) {
+                  setLastReply(message);
+                  void speak(message);
+                }
+              }} />
           )}
         </AnimatePresence>
       </div>
