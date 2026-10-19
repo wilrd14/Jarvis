@@ -12,6 +12,8 @@ import { useMorningBriefing } from "@/hooks/useMorningBriefing";
 import ActionCard from "@/components/ActionCard";
 import SpendBadge from "@/components/SpendBadge";
 import SettingsPanel,{ type PublicSettings } from "@/components/SettingsPanel";
+import { createSpeechSession, streamBrain, StreamUnavailable, type BrainDone, type SpeechSession } from "@/lib/brainStream";
+import { normalizeSpaces } from "@/lib/replystream";
 
 // Margen tras terminar el audio de Jarvis antes de reabrir el micrófono
 // (evita captar la cola/eco de su propia voz).
@@ -29,6 +31,24 @@ const STATE_LABEL: Record<AssistantState, string> = {
 // Voz de salida vía /api/speak (OpenRouter, con ElevenLabs como respaldo).
 const VOICE_OUTPUT_ENABLED = true;
 
+type ChatHistory = { role: "user" | "assistant"; content: string }[];
+
+/** Cerebro sin streaming: una sola respuesta JSON (modo clásico y respaldo del streaming). */
+async function fetchBrain(message: string, history: ChatHistory): Promise<BrainDone> {
+  const res = await fetch("/api/brain", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, history }),
+    // Sin tope, una red caída a medias dejaría la interfaz en "Procesando…" para siempre.
+    signal: AbortSignal.timeout(130_000),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error ?? "Error al pensar la respuesta.");
+  }
+  return (await res.json()) as BrainDone;
+}
+
 export default function Home() {
   const [state, setState] = useState<AssistantState>("idle");
   const [lastReply, setLastReply] = useState<string>(
@@ -45,9 +65,21 @@ export default function Home() {
   const reopenTimerRef = useRef<number | null>(null);
   const settingsRef = useRef<PublicSettings | null>(null);
   const startVoiceRef = useRef<(opts?: { noSpeechMs?: number }) => void>(() => {});
-  const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
+  const historyRef = useRef<ChatHistory>([]);
+  // Voz en tiempo real: turno en curso (para descartar resultados de un turno interrumpido),
+  // petición de streaming al cerebro y sesión de voz por frases.
+  const turnRef = useRef(0);
+  const brainAbortRef = useRef<AbortController | null>(null);
+  const sessionRef = useRef<SpeechSession | null>(null);
+  const [replyVersion, setReplyVersion] = useState(0);
 
-  const { amplitude: speakAmplitude, playWithAmplitude, stop: stopSpeaking } = useAudioAmplitude();
+  const { amplitude: speakAmplitude, playWithAmplitude, stop: stopSpeaking, queue: audioQueue } = useAudioAmplitude();
+
+  /** Muestra una respuesta completa (con animación de entrada). */
+  const showReply = useCallback((text: string) => {
+    setReplyVersion((v) => v + 1);
+    setLastReply(text);
+  }, []);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -73,7 +105,34 @@ export default function Home() {
     return () => cancelReopen();
   }, [cancelReopen]);
 
+  // Fin de la voz de un turno: vuelve a reposo y, en modo conversación, reabre el micrófono
+  // solo cuando terminó la ÚLTIMA frase (+ margen).
+  const afterSpeech = useCallback(() => {
+    setState("idle");
+    if (settingsRef.current?.conversationMode) {
+      setReopening(true);
+      reopenTimerRef.current = window.setTimeout(() => {
+        reopenTimerRef.current = null;
+        setReopening(false);
+        startVoiceRef.current({ noSpeechMs: CONVERSATION_NO_SPEECH_MS });
+      }, REOPEN_DELAY_MS);
+    }
+  }, []);
+
+  /** Interrupción por clic: corta la voz, las peticiones de voz y el stream del cerebro. */
+  const interruptSpeech = useCallback(() => {
+    turnRef.current++;
+    brainAbortRef.current?.abort();
+    sessionRef.current?.cancel();
+    sessionRef.current = null;
+    stopSpeaking();
+    setState("idle");
+  }, [stopSpeaking]);
+
   const speak = useCallback(async (text: string) => {
+    // Un aviso (recordatorio...) corta la voz por frases en curso, igual que cortaba el audio único.
+    sessionRef.current?.cancel();
+    sessionRef.current = null;
     setState("speaking");
     try {
       const res = await fetch("/api/speak", {
@@ -89,17 +148,9 @@ export default function Home() {
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       playWithAmplitude(url, () => {
-        setState("idle");
         URL.revokeObjectURL(url);
         // Modo conversación: reabrir el micrófono solo cuando el audio terminó (+ margen).
-        if (settingsRef.current?.conversationMode) {
-          setReopening(true);
-          reopenTimerRef.current = window.setTimeout(() => {
-            reopenTimerRef.current = null;
-            setReopening(false);
-            startVoiceRef.current({ noSpeechMs: CONVERSATION_NO_SPEECH_MS });
-          }, REOPEN_DELAY_MS);
-        }
+        afterSpeech();
       });
     } catch (err) {
       setErrorMsg(
@@ -111,7 +162,7 @@ export default function Home() {
       );
       setState("idle");
     }
-  }, [playWithAmplitude]);
+  }, [playWithAmplitude, afterSpeech]);
 
   const handleFinalTranscript = useCallback(async (text: string, opts?: { untrusted?: boolean }) => {
     if (!text) {
@@ -121,22 +172,47 @@ export default function Home() {
     setState("processing");
     setErrorMsg(null);
     setSources([]);
+    const myTurn = ++turnRef.current;
     try {
       // Hasta 2 vueltas: una acción de riesgo bajo (buscar archivos, notas, recordatorios...)
       // se ejecuta sola; su resultado vuelve al cerebro (followUp) o Jarvis lo dice (message).
       for (let turn = 0; turn < 2; turn++) {
-        const res = await fetch("/api/brain", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text, history: historyRef.current }),
-          // Sin tope, una red caída a medias dejaría la interfaz en "Procesando…" para siempre.
-          signal: AbortSignal.timeout(130_000),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => null);
-          throw new Error(data?.error ?? "Error al pensar la respuesta.");
+        const holder: { session: SpeechSession | null; spoken: string[] } = { session: null, spoken: [] };
+        let data: BrainDone;
+        if (VOICE_OUTPUT_ENABLED && (settingsRef.current?.streamingVoice ?? true)) {
+          const ac = new AbortController();
+          brainAbortRef.current = ac;
+          try {
+            data = await streamBrain({
+              message: text,
+              history: historyRef.current,
+              signal: AbortSignal.any([ac.signal, AbortSignal.timeout(130_000)]),
+              onSentence: (sentence) => {
+                if (turnRef.current !== myTurn) return;
+                if (!holder.session) {
+                  holder.session = createSpeechSession(audioQueue);
+                  sessionRef.current = holder.session;
+                  setState("speaking");
+                  setReplyVersion((v) => v + 1);
+                }
+                holder.session.add(sentence);
+                holder.spoken.push(sentence);
+                setLastReply(holder.spoken.join(" ")); // el texto aparece frase a frase
+              },
+            });
+          } catch (err) {
+            if (turnRef.current !== myTurn) return; // interrumpido por el usuario
+            if (err instanceof StreamUnavailable && !holder.session) {
+              data = await fetchBrain(text, historyRef.current); // respaldo sin streaming
+            } else {
+              holder.session?.cancel();
+              throw err;
+            }
+          }
+        } else {
+          data = await fetchBrain(text, historyRef.current);
         }
-        const data = await res.json();
+        if (turnRef.current !== myTurn) return;
         let reply: string = data.reply;
         let action: AssistantAction | null = data.action ?? null;
 
@@ -165,11 +241,24 @@ export default function Home() {
           { role: "user" as const, content: text },
           { role: "assistant" as const, content: reply },
         ].slice(-12);
-        setLastReply(reply);
+        const session = holder.session;
+        if (session) setLastReply(reply);
+        else showReply(reply);
         setSources(Array.isArray(data.sources) ? data.sources : []);
         setPendingAction(action);
         setPendingToken(typeof data.actionToken === "string" ? data.actionToken : undefined);
-        if (VOICE_OUTPUT_ENABLED) {
+        if (session) {
+          // Si la respuesta final difiere de lo ya dicho (p. ej. tras una búsqueda web), se dice el resto.
+          const said = normalizeSpaces(holder.spoken.join(" "));
+          const finalText = normalizeSpaces(reply);
+          if (finalText !== said) session.add(finalText.startsWith(said) ? finalText.slice(said.length).trim() : finalText);
+          const outcome = await session.end();
+          if (sessionRef.current === session) sessionRef.current = null;
+          // Cancelada (clic, aviso de recordatorio...): quien la cortó ya gestiona el estado.
+          if (outcome === "cancelled" || turnRef.current !== myTurn) return;
+          if (session.error) setErrorMsg(session.error);
+          afterSpeech();
+        } else if (VOICE_OUTPUT_ENABLED) {
           await speak(reply);
         } else {
           setState("idle");
@@ -177,6 +266,7 @@ export default function Home() {
         return;
       }
     } catch (err) {
+      if (turnRef.current !== myTurn) return; // turno interrumpido: el estado ya lo gestionó quien interrumpió
       setErrorMsg(
         err instanceof Error && err.name === "TimeoutError"
           ? "Jarvis tardó demasiado en responder. Inténtalo de nuevo."
@@ -186,7 +276,7 @@ export default function Home() {
       );
       setState("idle");
     }
-  }, [speak]);
+  }, [speak, afterSpeech, audioQueue, showReply]);
 
   useReminders(speak);
   useMorningBriefing(settings?.morningBriefing ?? false, state !== "idle", (t) => void handleFinalTranscript(t, { untrusted: true }));
@@ -219,13 +309,12 @@ export default function Home() {
     }
     if (voice.status === "processing" || state === "processing") return;
     if (state === "speaking") {
-      stopSpeaking();
-      setState("idle");
+      interruptSpeech();
     }
     setErrorMsg(null);
     setPendingAction(null);
     voice.start();
-  }, [voice, state, stopSpeaking, reopening, cancelReopen]);
+  }, [voice, state, interruptSpeech, reopening, cancelReopen]);
 
   const handleTextSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -273,7 +362,7 @@ export default function Home() {
 
         <AnimatePresence mode="wait">
           <motion.p
-            key={isListening ? "listening" : lastReply}
+            key={isListening ? "listening" : replyVersion}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
@@ -318,7 +407,7 @@ export default function Home() {
                   // El resultado (portapapeles, archivos) vuelve al cerebro como siguiente turno.
                   handleFinalTranscript(out.followUp, { untrusted: true });
                 } else if (out?.message) {
-                  setLastReply(out.message);
+                  showReply(out.message);
                   void speak(out.message);
                 }
               }}

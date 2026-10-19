@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import BudgetSettings from "@/components/BudgetSettings";
 import BriefingSettings from "./BriefingSettings";
 import MemorySettings from "./MemorySettings";
+import StreamingVoiceSettings from "./StreamingVoiceSettings";
 
 // Lo que devuelve GET /api/settings (nunca incluye la key completa).
 export interface PublicSettings {
@@ -17,6 +18,7 @@ export interface PublicSettings {
   wakeWord: boolean;
   city: string;
   morningBriefing: boolean;
+  streamingVoice: boolean;
   hasKey: boolean;
   keyLast4: string;
 }
@@ -140,6 +142,7 @@ function SettingsForm({
   );
   const [city, setCity] = useState(settings.city);
   const [morningBriefing, setMorningBriefing] = useState(settings.morningBriefing);
+  const [streamingVoice, setStreamingVoice] = useState(settings.streamingVoice ?? true);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
     null,
   );
@@ -187,6 +190,7 @@ function SettingsForm({
       conversationMode,
       city,
       morningBriefing,
+      streamingVoice,
     };
     if (apiKey.trim()) body.openrouterApiKey = apiKey.trim();
     try {
@@ -383,6 +387,7 @@ function SettingsForm({
             />
           </div>
 
+          <StreamingVoiceSettings streamingVoice={streamingVoice} onChange={setStreamingVoice} />
           <BudgetSettings />
           <MemorySettings />
           <BriefingSettings city={city} morningBriefing={morningBriefing} onCity={setCity} onMorningBriefing={setMorningBriefing} />

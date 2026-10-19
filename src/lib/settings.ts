@@ -25,6 +25,8 @@ export interface Settings {
   morningBriefing: boolean;
   /** Usar la memoria a largo plazo en el prompt del cerebro (false = no se usa, pero no se borra). */
   memoryEnabled: boolean;
+  /** Jarvis empieza a hablar mientras el cerebro aún escribe la respuesta (voz por frases). */
+  streamingVoice: boolean;
 }
 
 export type SettingName = keyof Settings;
@@ -44,6 +46,7 @@ export const DEFAULTS: Settings = {
   city: "Buenos Aires",
   morningBriefing: false,
   memoryEnabled: true,
+  streamingVoice: true,
 };
 
 const ENV_NAMES: Partial<Record<SettingName, string>> = {
@@ -64,7 +67,7 @@ function settingsFile(): string {
 }
 
 const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel", "visionModel"] as const;
-const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled"] as const;
+const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled", "streamingVoice"] as const;
 
 // Valida un objeto arbitrario: devuelve solo los campos válidos (los demás se ignoran).
 export function sanitize(input: unknown): Partial<Settings> {
