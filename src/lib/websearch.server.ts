@@ -1,3 +1,5 @@
+import { recordUsage } from "@/lib/usage.server";
+
 export interface WebSource {
   title: string;
   url: string;
@@ -58,6 +60,7 @@ export async function answerWithWebSearch(opts: {
   });
   if (!res.ok) return null;
   const data = await res.json();
+  recordUsage("search", data?.usage?.cost);
   const msg = data.choices?.[0]?.message;
   const reply = toSpeakable(typeof msg?.content === "string" ? msg.content : "");
   if (!reply) return null;

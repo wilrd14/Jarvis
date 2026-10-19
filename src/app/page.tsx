@@ -9,7 +9,8 @@ import { ASSISTANT_NAME, USER_NAME } from "@/lib/config";
 import { isAutoRun, runAssistantAction, type AssistantAction } from "@/lib/actions";
 import { useReminders } from "@/hooks/useReminders";
 import ActionCard from "@/components/ActionCard";
-import SettingsPanel, { type PublicSettings } from "@/components/SettingsPanel";
+import SpendBadge from "@/components/SpendBadge";
+import SettingsPanel,{ type PublicSettings } from "@/components/SettingsPanel";
 
 // Margen tras terminar el audio de Jarvis antes de reabrir el micrófono
 // (evita captar la cola/eco de su propia voz).
@@ -237,6 +238,7 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between bg-background px-6 py-12 text-foreground">
+      <SpendBadge />
       <header className="text-center">
         <h1 className="font-[family-name:var(--font-heading)] text-2xl tracking-wide text-core">
           {ASSISTANT_NAME}

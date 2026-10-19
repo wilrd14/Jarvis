@@ -1,6 +1,7 @@
 import { USER_NAME, ASSISTANT_NAME } from "@/lib/config";
 import { answerWithWebSearch, type WebSource } from "@/lib/websearch.server";
 import { getSetting } from "@/lib/settings";
+import { recordUsage, rejectIfOverBudget } from "@/lib/usage.server";
 import { LIMITS, jsonResponse, rejectForeignRequest, providerError, rateLimit, tooMany } from "@/lib/guard";
 import { signProposal } from "@/lib/proposals.server";
 import { buildActionsPrompt, getActionDefinition, parseAction, type AssistantAction } from "@/lib/actions";
@@ -65,6 +66,8 @@ export async function POST(req: Request) {
   const blocked = rejectForeignRequest(req);
   if (blocked) return blocked;
   if (!rateLimit("brain", 30)) return tooMany();
+  const overBudget = await rejectIfOverBudget();
+  if (overBudget) return overBudget;
 
   let body: Partial<BrainRequestBody> | null;
   try {
@@ -133,6 +136,7 @@ export async function POST(req: Request) {
   }
 
   const data = await response.json();
+  recordUsage("brain", data?.usage?.cost);
   const rawText: string = data.choices?.[0]?.message?.content ?? "";
 
   const parsed = extractJson(rawText) ?? {

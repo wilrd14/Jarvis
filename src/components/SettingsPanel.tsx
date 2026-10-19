@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import BudgetSettings from "@/components/BudgetSettings";
 
 // Lo que devuelve GET /api/settings (nunca incluye la key completa).
 export interface PublicSettings {
@@ -373,6 +374,8 @@ function SettingsForm({
               label="Modo conversación"
             />
           </div>
+
+          <BudgetSettings />
 
           <div className="flex items-start justify-between gap-4 opacity-60">
             <div>

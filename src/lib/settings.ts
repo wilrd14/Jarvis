@@ -14,6 +14,10 @@ export interface Settings {
   silenceMs: number;
   conversationMode: boolean;
   wakeWord: boolean;
+  /** Tope mensual de gasto en USD (0 = sin tope). */
+  monthlyBudgetUsd: number;
+  /** Si es true, al superar el tope las rutas de IA responden 402. */
+  blockOnBudget: boolean;
 }
 
 export type SettingName = keyof Settings;
@@ -27,6 +31,8 @@ export const DEFAULTS: Settings = {
   silenceMs: 1200,
   conversationMode: false,
   wakeWord: false,
+  monthlyBudgetUsd: 0,
+  blockOnBudget: false,
 };
 
 const ENV_NAMES: Partial<Record<SettingName, string>> = {
@@ -46,7 +52,7 @@ function settingsFile(): string {
 }
 
 const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel"] as const;
-const BOOL_FIELDS = ["conversationMode", "wakeWord"] as const;
+const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget"] as const;
 
 // Valida un objeto arbitrario: devuelve solo los campos válidos (los demás se ignoran).
 export function sanitize(input: unknown): Partial<Settings> {
@@ -67,6 +73,10 @@ export function sanitize(input: unknown): Partial<Settings> {
   const s = src.silenceMs;
   if (typeof s === "number" && Number.isFinite(s)) {
     out.silenceMs = Math.min(5000, Math.max(500, Math.round(s)));
+  }
+  const b = src.monthlyBudgetUsd;
+  if (typeof b === "number" && Number.isFinite(b)) {
+    out.monthlyBudgetUsd = Math.min(100000, Math.max(0, Math.round(b * 10000) / 10000));
   }
   return out;
 }
