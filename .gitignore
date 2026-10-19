@@ -52,3 +52,5 @@ dev.log
 
 # ajustes locales de Jarvis (contienen la API key)
 .jarvis-data/
+# electron
+/release/
