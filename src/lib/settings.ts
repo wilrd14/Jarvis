@@ -14,6 +14,10 @@ export interface Settings {
   silenceMs: number;
   conversationMode: boolean;
   wakeWord: boolean;
+  /** Ciudad para el clima del resumen del día. */
+  city: string;
+  /** Lanzar el resumen del día al abrir Jarvis por primera vez cada mañana. */
+  morningBriefing: boolean;
 }
 
 export type SettingName = keyof Settings;
@@ -27,6 +31,8 @@ export const DEFAULTS: Settings = {
   silenceMs: 1200,
   conversationMode: false,
   wakeWord: false,
+  city: "Buenos Aires",
+  morningBriefing: false,
 };
 
 const ENV_NAMES: Partial<Record<SettingName, string>> = {
@@ -46,7 +52,7 @@ function settingsFile(): string {
 }
 
 const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel"] as const;
-const BOOL_FIELDS = ["conversationMode", "wakeWord"] as const;
+const BOOL_FIELDS = ["conversationMode", "wakeWord", "morningBriefing"] as const;
 
 // Valida un objeto arbitrario: devuelve solo los campos válidos (los demás se ignoran).
 export function sanitize(input: unknown): Partial<Settings> {
@@ -63,6 +69,11 @@ export function sanitize(input: unknown): Partial<Settings> {
   }
   for (const k of BOOL_FIELDS) {
     if (typeof src[k] === "boolean") out[k] = src[k] as boolean;
+  }
+  // Ciudad: solo letras, números y puntuación simple (se usa en una consulta de búsqueda).
+  if (typeof src.city === "string") {
+    const c = src.city.trim().replace(/\s+/g, " ");
+    if (c === "" || /^[\p{L}\p{M}0-9 .,'-]{1,80}$/u.test(c)) out.city = c;
   }
   const s = src.silenceMs;
   if (typeof s === "number" && Number.isFinite(s)) {

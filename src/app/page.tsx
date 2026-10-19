@@ -8,6 +8,7 @@ import { useAudioAmplitude } from "@/hooks/useAudioAmplitude";
 import { ASSISTANT_NAME, USER_NAME } from "@/lib/config";
 import { isAutoRun, runAssistantAction, type AssistantAction } from "@/lib/actions";
 import { useReminders } from "@/hooks/useReminders";
+import { useMorningBriefing } from "@/hooks/useMorningBriefing";
 import ActionCard from "@/components/ActionCard";
 import SettingsPanel, { type PublicSettings } from "@/components/SettingsPanel";
 
@@ -187,6 +188,7 @@ export default function Home() {
   }, [speak]);
 
   useReminders(speak);
+  useMorningBriefing(settings?.morningBriefing ?? false, state !== "idle", (t) => void handleFinalTranscript(t, { untrusted: true }));
 
   const voice = useVoiceInput(handleFinalTranscript, { silenceMs: settings?.silenceMs });
   useEffect(() => {

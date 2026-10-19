@@ -37,11 +37,13 @@ export async function answerWithWebSearch(opts: {
   history: ChatTurn[];
   message: string;
   query: string;
+  /** Tope de espera (por defecto 60 s). */
+  timeoutMs?: number;
 }): Promise<WebAnswer | null> {
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${opts.apiKey}`, "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000),
     body: JSON.stringify({
       model: opts.model,
       max_tokens: 1500,

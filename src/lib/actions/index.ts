@@ -22,6 +22,7 @@ import { openUrlAction } from "./open-url";
 import { screenshotAction } from "./screenshot";
 import { volumeAction } from "./volume";
 import { productivityActions } from "./productivity";
+import { dailyBriefingAction } from "./briefing";
 import type { ActionDefinition } from "./types";
 
 export type { ActionDefinition, ActionRisk, ServerActionResult } from "./types";
@@ -38,6 +39,7 @@ const ACTION_DEFINITIONS = [
   fileOpenAction,
   ...PC_CONTROL_ACTIONS,
   ...productivityActions,
+  dailyBriefingAction,
 ] as const;
 
 /** Unión discriminada por `type`, derivada del registro. */

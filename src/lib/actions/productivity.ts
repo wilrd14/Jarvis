@@ -6,6 +6,7 @@
  * /api/actions/execute) y aquí solo se importan sus tipos.
  */
 import { isRecord, isoDate, str, type ActionDefinition, type ServerActionResult } from "./types";
+import { TIMEZONE as TZ } from "../config";
 
 type Store = typeof import("../store/notes") & typeof import("../store/reminders");
 
@@ -15,7 +16,6 @@ function store(): Store {
   return s;
 }
 
-const TZ = "America/Argentina/Buenos_Aires";
 
 function fmtWhen(iso: string): string {
   return new Date(iso).toLocaleString("es-ES", { timeZone: TZ, dateStyle: "full", timeStyle: "short" });

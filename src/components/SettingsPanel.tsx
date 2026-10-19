@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import BriefingSettings from "./BriefingSettings";
 
 // Lo que devuelve GET /api/settings (nunca incluye la key completa).
 export interface PublicSettings {
@@ -12,6 +13,8 @@ export interface PublicSettings {
   silenceMs: number;
   conversationMode: boolean;
   wakeWord: boolean;
+  city: string;
+  morningBriefing: boolean;
   hasKey: boolean;
   keyLast4: string;
 }
@@ -133,6 +136,8 @@ function SettingsForm({
   const [conversationMode, setConversationMode] = useState(
     settings.conversationMode,
   );
+  const [city, setCity] = useState(settings.city);
+  const [morningBriefing, setMorningBriefing] = useState(settings.morningBriefing);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(
     null,
   );
@@ -178,6 +183,8 @@ function SettingsForm({
       ttsVoice: tts.voice.trim(),
       silenceMs,
       conversationMode,
+      city,
+      morningBriefing,
     };
     if (apiKey.trim()) body.openrouterApiKey = apiKey.trim();
     try {
@@ -373,6 +380,8 @@ function SettingsForm({
               label="Modo conversación"
             />
           </div>
+
+          <BriefingSettings city={city} morningBriefing={morningBriefing} onCity={setCity} onMorningBriefing={setMorningBriefing} />
 
           <div className="flex items-start justify-between gap-4 opacity-60">
             <div>

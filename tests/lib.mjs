@@ -5,7 +5,7 @@ export const BASE = process.env.JARVIS_TEST_URL || "http://127.0.0.1:3822";
 export const SAFE_EXECUTE = new Set([
   "note_add", "note_list", "note_search", "note_delete",
   "reminder_add", "reminder_list", "reminder_cancel",
-  "timer_start", "timer_cancel", "alarm_set",
+  "timer_start", "timer_cancel", "alarm_set", "daily_briefing",
 ]);
 
 let pass = 0;
