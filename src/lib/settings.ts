@@ -11,6 +11,7 @@ export interface Settings {
   ttsModel: string;
   ttsVoice: string;
   sttModel: string;
+  visionModel: string;
   silenceMs: number;
   conversationMode: boolean;
   wakeWord: boolean;
@@ -24,6 +25,7 @@ export const DEFAULTS: Settings = {
   ttsModel: "elevenlabs/eleven-flash-v2.5",
   ttsVoice: "george",
   sttModel: "google/gemini-3.1-flash-lite",
+  visionModel: "google/gemini-3.1-flash-lite",
   silenceMs: 1200,
   conversationMode: false,
   wakeWord: false,
@@ -35,6 +37,7 @@ const ENV_NAMES: Partial<Record<SettingName, string>> = {
   ttsModel: "OPENROUTER_TTS_MODEL",
   ttsVoice: "OPENROUTER_TTS_VOICE",
   sttModel: "OPENROUTER_STT_MODEL",
+  visionModel: "OPENROUTER_VISION_MODEL",
 };
 
 export function dataDir(): string {
@@ -45,7 +48,7 @@ function settingsFile(): string {
   return path.join(dataDir(), "settings.json");
 }
 
-const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel"] as const;
+const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel", "visionModel"] as const;
 const BOOL_FIELDS = ["conversationMode", "wakeWord"] as const;
 
 // Valida un objeto arbitrario: devuelve solo los campos válidos (los demás se ignoran).

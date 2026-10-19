@@ -13,7 +13,7 @@ interface ActionCardProps {
 }
 
 export default function ActionCard({ action, token, onDone }: ActionCardProps) {
-  const { title, detail } = describeAction(action);
+  const { title, detail, confirmLabel } = describeAction(action);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +46,7 @@ export default function ActionCard({ action, token, onDone }: ActionCardProps) {
         disabled={busy}
         className="mt-3 w-full rounded-lg bg-emerald/90 px-4 py-2 text-sm font-medium text-background transition hover:bg-emerald disabled:opacity-40"
       >
-        Confirmar y abrir
+        {confirmLabel ?? "Confirmar y abrir"}
       </button>
     </motion.div>
   );
