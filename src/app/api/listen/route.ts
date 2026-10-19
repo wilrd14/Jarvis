@@ -2,6 +2,7 @@
 // petición y lo transcribe con un modelo Gemini vía OpenRouter.
 
 import { getSetting } from "@/lib/settings";
+import { recordUsage, rejectIfOverBudget } from "@/lib/usage.server";
 import { LIMITS, providerError, rateLimit, rejectForeignRequest, tooMany } from "@/lib/guard";
 
 const MAX_BYTES = LIMITS.listenBytes;
@@ -29,6 +30,8 @@ export async function POST(req: Request) {
   const blocked = rejectForeignRequest(req);
   if (blocked) return blocked;
   if (!rateLimit("listen", 20)) return tooMany();
+  const overBudget = await rejectIfOverBudget();
+  if (overBudget) return overBudget;
   const apiKey = getSetting("openrouterApiKey");
   if (!apiKey) {
     return json({ error: "Falta la API key de OpenRouter: configúrala en Ajustes." }, 500);
@@ -84,6 +87,7 @@ export async function POST(req: Request) {
   }
 
   const out = await res.json().catch(() => null);
+  recordUsage("stt", out?.usage?.cost);
   const content = out?.choices?.[0]?.message?.content;
   let text = typeof content === "string" ? content.trim() : "";
   // El modelo a veces explica que no hay voz en vez de devolver vacío; eso no es un mensaje del usuario.

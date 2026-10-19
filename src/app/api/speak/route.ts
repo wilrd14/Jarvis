@@ -1,4 +1,5 @@
 import { getSetting } from "@/lib/settings";
+import { recordUsage, rejectIfOverBudget } from "@/lib/usage.server";
 import { LIMITS, providerError, rateLimit, rejectForeignRequest, tooMany } from "@/lib/guard";
 
 const json = (body: unknown, status: number) =>
@@ -58,6 +59,7 @@ async function speakWithOpenRouter(text: string, apiKey: string) {
   const rate = Number(response.headers.get("content-type")?.match(/rate=(\d+)/)?.[1]) || 24000;
   const pcm = new Uint8Array(await response.arrayBuffer());
   if (!pcm.length) return json({ error: "OpenRouter no devolvió audio." }, 502);
+  recordUsage("voice"); // audio/speech no devuelve coste: solo se cuenta la llamada
 
   return new Response(pcm16ToWav(pcm, rate) as BodyInit, {
     headers: { "Content-Type": "audio/wav" },
@@ -98,6 +100,8 @@ export async function POST(req: Request) {
   const blocked = rejectForeignRequest(req);
   if (blocked) return blocked;
   if (!rateLimit("speak", 30)) return tooMany();
+  const overBudget = await rejectIfOverBudget();
+  if (overBudget) return overBudget;
 
   let text: unknown;
   try {
