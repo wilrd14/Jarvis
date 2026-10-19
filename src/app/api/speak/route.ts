@@ -1,3 +1,5 @@
+import { getSetting } from "@/lib/settings";
+
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
     status,
@@ -38,8 +40,8 @@ async function speakWithOpenRouter(text: string, apiKey: string) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.OPENROUTER_TTS_MODEL ?? "elevenlabs/eleven-flash-v2.5",
-      voice: process.env.OPENROUTER_TTS_VOICE ?? "george",
+      model: getSetting("ttsModel"),
+      voice: getSetting("ttsVoice"),
       input: text,
       response_format: "pcm",
     }),
@@ -96,7 +98,7 @@ export async function POST(req: Request) {
     return json({ error: "Falta el texto a sintetizar." }, 400);
   }
 
-  const openRouterKey = process.env.OPENROUTER_API_KEY;
+  const openRouterKey = getSetting("openrouterApiKey");
   if (openRouterKey) return speakWithOpenRouter(text, openRouterKey);
 
   const elevenKey = process.env.ELEVENLABS_API_KEY;

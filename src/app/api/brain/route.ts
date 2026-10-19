@@ -1,5 +1,6 @@
 import { USER_NAME, ASSISTANT_NAME } from "@/lib/config";
 import { answerWithWebSearch, type WebSource } from "@/lib/websearch.server";
+import { getSetting } from "@/lib/settings";
 import { buildActionsPrompt, parseAction, type AssistantAction } from "@/lib/actions";
 
 interface ChatTurn {
@@ -68,10 +69,10 @@ export async function POST(req: Request) {
     });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = getSetting("openrouterApiKey");
   if (!apiKey) {
     return new Response(
-      JSON.stringify({ error: "Falta OPENROUTER_API_KEY en .env.local." }),
+      JSON.stringify({ error: "Falta la API key de OpenRouter: configúrala en Ajustes." }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
     .filter((t) => (t.role === "user" || t.role === "assistant") && typeof t.content === "string")
     .slice(-12);
 
-  const model = process.env.OPENROUTER_MODEL ?? "anthropic/claude-sonnet-5.5";
+  const model = getSetting("model");
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
