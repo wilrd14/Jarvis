@@ -7,6 +7,7 @@ import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { useAudioAmplitude } from "@/hooks/useAudioAmplitude";
 import { ASSISTANT_NAME, USER_NAME } from "@/lib/config";
 import { isAutoRun, runAssistantAction, type AssistantAction } from "@/lib/actions";
+import { useReminders } from "@/hooks/useReminders";
 import ActionCard from "@/components/ActionCard";
 import SettingsPanel, { type PublicSettings } from "@/components/SettingsPanel";
 
@@ -111,8 +112,8 @@ export default function Home() {
     setErrorMsg(null);
     setSources([]);
     try {
-      // Hasta 2 vueltas: una acción de riesgo bajo (p. ej. buscar archivos) se ejecuta
-      // sola y su resultado vuelve al cerebro como siguiente turno.
+      // Hasta 2 vueltas: una acción de riesgo bajo (buscar archivos, notas, recordatorios...)
+      // se ejecuta sola; su resultado vuelve al cerebro (followUp) o Jarvis lo dice (message).
       for (let turn = 0; turn < 2; turn++) {
         const res = await fetch("/api/brain", {
           method: "POST",
@@ -124,25 +125,38 @@ export default function Home() {
           throw new Error(data?.error ?? "Error al pensar la respuesta.");
         }
         const data = await res.json();
+        let reply: string = data.reply;
+        let action: AssistantAction | null = data.action ?? null;
+
+        if (action && turn === 0 && isAutoRun(action)) {
+          try {
+            const out = await runAssistantAction(action);
+            if (out.followUp) {
+              historyRef.current = [
+                ...historyRef.current,
+                { role: "user" as const, content: text },
+                { role: "assistant" as const, content: reply },
+              ].slice(-12);
+              text = out.followUp;
+              continue;
+            }
+            if (out.message) reply = out.message;
+          } catch (err) {
+            reply = err instanceof Error ? err.message : reply;
+          }
+          action = null;
+        }
+
         historyRef.current = [
           ...historyRef.current,
           { role: "user" as const, content: text },
-          { role: "assistant" as const, content: data.reply },
+          { role: "assistant" as const, content: reply },
         ].slice(-12);
-        setLastReply(data.reply);
+        setLastReply(reply);
         setSources(Array.isArray(data.sources) ? data.sources : []);
-
-        const action: AssistantAction | null = data.action ?? null;
-        if (action && turn === 0 && isAutoRun(action)) {
-          const out = await runAssistantAction(action);
-          if (out.followUp) {
-            text = out.followUp;
-            continue;
-          }
-        }
         setPendingAction(action);
         if (VOICE_OUTPUT_ENABLED) {
-          await speak(data.reply);
+          await speak(reply);
         } else {
           setState("idle");
         }
@@ -153,6 +167,8 @@ export default function Home() {
       setState("idle");
     }
   }, [speak]);
+
+  useReminders(speak);
 
   const voice = useVoiceInput(handleFinalTranscript, { silenceMs: settings?.silenceMs });
   useEffect(() => {
@@ -273,10 +289,15 @@ export default function Home() {
           {pendingAction && (
             <ActionCard
               action={pendingAction}
-              onDone={(followUp) => {
+              onDone={(out) => {
                 setPendingAction(null);
-                // El resultado (portapapeles, archivos) vuelve al cerebro como siguiente turno.
-                if (followUp) handleFinalTranscript(followUp);
+                if (out?.followUp) {
+                  // El resultado (portapapeles, archivos) vuelve al cerebro como siguiente turno.
+                  handleFinalTranscript(out.followUp);
+                } else if (out?.message) {
+                  setLastReply(out.message);
+                  void speak(out.message);
+                }
               }}
             />
           )}

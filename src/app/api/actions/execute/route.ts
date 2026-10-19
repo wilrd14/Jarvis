@@ -1,4 +1,5 @@
 import { getActionDefinition } from "@/lib/actions";
+import "@/lib/store/register";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {

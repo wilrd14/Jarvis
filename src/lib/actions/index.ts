@@ -21,6 +21,7 @@ import { openFolderAction } from "./open-folder";
 import { openUrlAction } from "./open-url";
 import { screenshotAction } from "./screenshot";
 import { volumeAction } from "./volume";
+import { productivityActions } from "./productivity";
 import type { ActionDefinition } from "./types";
 
 export type { ActionDefinition, ActionRisk, ServerActionResult } from "./types";
@@ -36,6 +37,7 @@ const ACTION_DEFINITIONS = [
   fileSearchAction,
   fileOpenAction,
   ...PC_CONTROL_ACTIONS,
+  ...productivityActions,
 ] as const;
 
 /** Unión discriminada por `type`, derivada del registro. */
@@ -75,9 +77,14 @@ Con una acción, el JSON completo es {"reply": "...", "action": <objeto>}. Si no
 }
 
 /** Ejecuta una acción ya confirmada: en el navegador o vía la ruta del servidor. */
-export async function runAssistantAction(
-  action: AssistantAction
-): Promise<{ followUp?: string }> {
+export interface ActionOutcome {
+  /** Texto que vuelve al cerebro como siguiente turno (portapapeles, resultados de archivos...). */
+  followUp?: string;
+  /** Mensaje del servidor para mostrar y decir en voz alta (notas, recordatorios...). */
+  message?: string;
+}
+
+export async function runAssistantAction(action: AssistantAction): Promise<ActionOutcome> {
   const def = REGISTRY.get(action.type);
   if (!def) throw new Error("Acción desconocida.");
   if (def.execution.kind === "client") {
@@ -93,7 +100,10 @@ export async function runAssistantAction(
   if (!res.ok || !data?.ok) {
     throw new Error(data?.error ?? data?.message ?? "No se pudo ejecutar la acción.");
   }
-  return { followUp: typeof data.followUp === "string" ? data.followUp : undefined };
+  return {
+    followUp: typeof data.followUp === "string" ? data.followUp : undefined,
+    message: typeof data.message === "string" ? data.message : undefined,
+  };
 }
 
 /** Acciones de riesgo bajo se ejecutan sin tarjeta de confirmación. */
