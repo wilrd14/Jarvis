@@ -1,7 +1,7 @@
 import { USER_NAME, ASSISTANT_NAME } from "@/lib/config";
 import { answerWithWebSearch, type WebSource } from "@/lib/websearch.server";
 import { getSetting } from "@/lib/settings";
-import { LIMITS, jsonResponse, providerError, rateLimit, tooMany } from "@/lib/guard";
+import { LIMITS, jsonResponse, rejectForeignRequest, providerError, rateLimit, tooMany } from "@/lib/guard";
 import { signProposal } from "@/lib/proposals.server";
 import { buildActionsPrompt, getActionDefinition, parseAction, type AssistantAction } from "@/lib/actions";
 
@@ -25,7 +25,7 @@ interface BrainResponseBody {
 
 const buildSystemPrompt = () => `Eres ${ASSISTANT_NAME}, el asistente de voz personal de ${USER_NAME}. Respondes siempre en español, de forma breve, natural y cálida, como si hablaras en voz alta.
 
-Cuando ${USER_NAME} te pida enviar un correo o crear un evento de calendario, NO digas que ya lo hiciste — tú solo preparas la acción, y es ${USER_NAME} quien la confirma con un clic. Usa frases como "Te dejé listo el correo para que lo confirmes" o "Te preparé el evento, solo falta que le des guardar".
+Cuando ${USER_NAME} te pida enviar un correo o crear un evento de calendario, NO digas que ya lo hiciste — tú solo preparas la acción, y es ${USER_NAME} quien la confirma con un clic. Usa frases como "Te dejé listo el correo para que lo confirmes" o "Te preparé el evento, solo falta que le des guardar". Lo mismo con cualquier otra acción que pida confirmación (abrir apps, archivos o enlaces, bloquear la pantalla, cambiar el volumen, capturas de pantalla, borrar notas): no digas que ya está hecha, di que la dejas lista para que la confirme.
 
 Debes responder EXCLUSIVAMENTE con un objeto JSON válido, sin texto adicional ni markdown, con esta forma exacta:
 {
@@ -62,16 +62,18 @@ function extractJson(text: string): BrainResponseBody | null {
 }
 
 export async function POST(req: Request) {
+  const blocked = rejectForeignRequest(req);
+  if (blocked) return blocked;
   if (!rateLimit("brain", 30)) return tooMany();
 
-  let body: Partial<BrainRequestBody>;
+  let body: Partial<BrainRequestBody> | null;
   try {
-    body = (await req.json()) as Partial<BrainRequestBody>;
+    body = (await req.json()) as Partial<BrainRequestBody> | null;
   } catch {
     return jsonResponse({ error: "JSON inválido." }, 400);
   }
-  const { message } = body;
-  const history = Array.isArray(body.history) ? body.history : [];
+  const message = body?.message;
+  const history = Array.isArray(body?.history) ? body.history : [];
 
   if (!message || typeof message !== "string") {
     return jsonResponse({ error: "Falta el mensaje." }, 400);
@@ -99,23 +101,32 @@ export async function POST(req: Request) {
     .map((t) => ({ role: t.role, content: t.content.slice(0, LIMITS.historyItemChars) }));
 
   const model = getSetting("model");
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      // Margen amplio: el modelo razona antes de responder y con 700 el JSON salía cortado.
-      max_tokens: 2500,
-      messages: [
-        { role: "system", content: buildSystemPrompt() },
-        ...recent,
-        { role: "user", content: message },
-      ],
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(60_000),
+      body: JSON.stringify({
+        model,
+        // Margen amplio: el modelo razona antes de responder y con 700 el JSON salía cortado.
+        max_tokens: 2500,
+        messages: [
+          { role: "system", content: buildSystemPrompt() },
+          ...recent,
+          { role: "user", content: message },
+        ],
+      }),
+    });
+  } catch {
+    return new Response(
+      JSON.stringify({ error: "No se pudo contactar con OpenRouter: revisa tu conexión a internet." }),
+      { status: 502, headers: { "Content-Type": "application/json" } }
+    );
+  }
 
   if (!response.ok) {
     return providerError("OpenRouter", response.status, await response.text());

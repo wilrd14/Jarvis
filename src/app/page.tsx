@@ -78,6 +78,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(60_000),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -99,7 +100,13 @@ export default function Home() {
         }
       });
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Error al hablar.");
+      setErrorMsg(
+        err instanceof Error && err.name === "TimeoutError"
+          ? "La voz tardó demasiado en generarse."
+          : err instanceof Error
+            ? err.message
+            : "Error al hablar."
+      );
       setState("idle");
     }
   }, [playWithAmplitude]);
@@ -120,6 +127,8 @@ export default function Home() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: text, history: historyRef.current }),
+          // Sin tope, una red caída a medias dejaría la interfaz en "Procesando…" para siempre.
+          signal: AbortSignal.timeout(130_000),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => null);
@@ -166,7 +175,13 @@ export default function Home() {
         return;
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Algo salió mal.");
+      setErrorMsg(
+        err instanceof Error && err.name === "TimeoutError"
+          ? "Jarvis tardó demasiado en responder. Inténtalo de nuevo."
+          : err instanceof Error
+            ? err.message
+            : "Algo salió mal."
+      );
       setState("idle");
     }
   }, [speak]);

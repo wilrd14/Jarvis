@@ -1,5 +1,5 @@
 import { getSetting } from "@/lib/settings";
-import { LIMITS, providerError, rateLimit, tooMany } from "@/lib/guard";
+import { LIMITS, providerError, rateLimit, rejectForeignRequest, tooMany } from "@/lib/guard";
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
@@ -40,6 +40,7 @@ async function speakWithOpenRouter(text: string, apiKey: string) {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(45_000),
     body: JSON.stringify({
       model: getSetting("ttsModel"),
       voice: getSetting("ttsVoice"),
@@ -69,6 +70,7 @@ async function speakWithElevenLabs(text: string, apiKey: string, voiceId: string
     {
       method: "POST",
       headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         text,
         model_id: "eleven_multilingual_v2",
@@ -93,6 +95,8 @@ async function speakWithElevenLabs(text: string, apiKey: string, voiceId: string
 }
 
 export async function POST(req: Request) {
+  const blocked = rejectForeignRequest(req);
+  if (blocked) return blocked;
   if (!rateLimit("speak", 30)) return tooMany();
 
   let text: unknown;
@@ -110,11 +114,15 @@ export async function POST(req: Request) {
   }
 
   const openRouterKey = getSetting("openrouterApiKey");
-  if (openRouterKey) return speakWithOpenRouter(text, openRouterKey);
+  try {
+    if (openRouterKey) return await speakWithOpenRouter(text, openRouterKey);
 
-  const elevenKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID;
-  if (elevenKey && voiceId) return speakWithElevenLabs(text, elevenKey, voiceId);
+    const elevenKey = process.env.ELEVENLABS_API_KEY;
+    const voiceId = process.env.ELEVENLABS_VOICE_ID;
+    if (elevenKey && voiceId) return await speakWithElevenLabs(text, elevenKey, voiceId);
+  } catch {
+    return json({ error: "No se pudo contactar con el servicio de voz: revisa tu conexión a internet." }, 502);
+  }
 
   return json(
     { error: "Falta OPENROUTER_API_KEY (o ELEVENLABS_API_KEY y ELEVENLABS_VOICE_ID) en .env.local." },

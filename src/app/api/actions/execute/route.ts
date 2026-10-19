@@ -1,7 +1,7 @@
 import { getActionDefinition } from "@/lib/actions";
 import "@/lib/store/register";
 import { verifyProposal } from "@/lib/proposals.server";
-import { rateLimit, tooMany } from "@/lib/guard";
+import { rejectForeignRequest } from "@/lib/guard";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -15,7 +15,8 @@ function json(body: unknown, status = 200) {
  * del registro y los campos con el `parse` estricto de cada acción.
  */
 export async function POST(req: Request) {
-  if (!rateLimit("execute", 60)) return tooMany();
+  const blocked = rejectForeignRequest(req);
+  if (blocked) return blocked;
   let body: unknown;
   try {
     body = await req.json();
