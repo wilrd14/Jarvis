@@ -15,6 +15,8 @@ interface UsageData {
   limit?: number | null;
   limitRemaining?: number | null;
   limitReset?: string | null;
+  creditsTotal?: number | null;
+  creditsRemaining?: number | null;
   spendMonth?: number;
   budget?: {
     monthlyBudgetUsd: number;
@@ -78,6 +80,11 @@ export default function SpendBadge() {
     pct = ((data.limit - (data.limitRemaining ?? data.limit)) / data.limit) * 100;
     remaining = data.limitRemaining ?? null;
   }
+  // El saldo real de la cuenta manda: el límite de la key puede ser mucho mayor que lo comprado.
+  const credits = data.creditsRemaining ?? null;
+  if (credits !== null && (remaining === null || credits < remaining)) remaining = credits;
+  const lowCredit = credits !== null && credits < 1;
+  if (lowCredit) pct = Math.max(pct ?? 0, credits < 0.1 ? 100 : 80);
   const color =
     pct !== null && pct >= 100
       ? "text-red-400 border-red-400/50"
@@ -101,6 +108,12 @@ export default function SpendBadge() {
           <p className="uppercase tracking-widest text-emerald/70">Gasto en OpenRouter</p>
           <p>Hoy: {usd(data.daily)} · Semana: {usd(data.weekly)}</p>
           <p>Mes: {usd(data.monthly)} · Total: {usd(data.usage)}</p>
+          {data.creditsTotal != null && (
+            <p className={lowCredit ? "text-red-300" : undefined}>
+              Saldo de la cuenta: {usd(data.creditsRemaining)} de {usd(data.creditsTotal)}
+              {lowCredit ? " — recarga en openrouter.ai/credits" : ""}
+            </p>
+          )}
           {data.limit ? (
             <p>
               Límite de la key: {usd(data.limit)}

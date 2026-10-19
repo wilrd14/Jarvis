@@ -19,6 +19,9 @@ export interface RemoteUsage {
   limit: number | null;
   limitRemaining: number | null;
   limitReset: string | null;
+  /** Crédito comprado en la cuenta y lo que queda (el límite de la key puede ser mayor que el saldo real). */
+  creditsTotal: number | null;
+  creditsRemaining: number | null;
   fetchedAt: number;
 }
 
@@ -83,6 +86,24 @@ async function fetchRemote(apiKey: string): Promise<RemoteUsage | null> {
     const d = (await res.json())?.data;
     const usage = num(d?.usage);
     if (usage === null) return null;
+    // Saldo real de la cuenta: si falla, el resto del contador sigue funcionando.
+    let creditsTotal: number | null = null;
+    let creditsRemaining: number | null = null;
+    try {
+      const cr = await fetch("https://openrouter.ai/api/v1/credits", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(10_000),
+        cache: "no-store",
+      });
+      if (cr.ok) {
+        const c = (await cr.json())?.data;
+        creditsTotal = num(c?.total_credits);
+        const used = num(c?.total_usage);
+        if (creditsTotal !== null && used !== null) creditsRemaining = Math.max(0, creditsTotal - used);
+      }
+    } catch {
+      /* sin saldo disponible */
+    }
     return {
       usage,
       daily: num(d.usage_daily),
@@ -91,6 +112,8 @@ async function fetchRemote(apiKey: string): Promise<RemoteUsage | null> {
       limit: num(d.limit),
       limitRemaining: num(d.limit_remaining),
       limitReset: typeof d.limit_reset === "string" ? d.limit_reset : null,
+      creditsTotal,
+      creditsRemaining,
       fetchedAt: Date.now(),
     };
   } catch {

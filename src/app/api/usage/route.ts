@@ -24,6 +24,8 @@ export async function GET() {
     limit: d.limit,
     limitRemaining: d.limitRemaining,
     limitReset: d.limitReset,
+    creditsTotal: d.creditsTotal,
+    creditsRemaining: d.creditsRemaining,
     spendMonth: monthSpend(d),
     budget: { ...budget, justExceeded: takeBudgetWarning(budget.overBudget) },
     session: sessionUsage(),
