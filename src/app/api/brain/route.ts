@@ -1,5 +1,5 @@
 import { USER_NAME, ASSISTANT_NAME } from "@/lib/config";
-import type { AssistantAction } from "@/lib/actions";
+import { buildActionsPrompt, parseAction, type AssistantAction } from "@/lib/actions";
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -26,23 +26,11 @@ Debes responder EXCLUSIVAMENTE con un objeto JSON válido, sin texto adicional n
   "action": null
 }
 
-Si la petición implica enviar un correo, en vez de null usa:
-{
-  "reply": "...",
-  "action": { "type": "email", "to": "destinatario@ejemplo.com", "subject": "...", "body": "..." }
-}
-
-Si implica crear un evento de calendario, usa fechas ISO 8601 en UTC:
-{
-  "reply": "...",
-  "action": { "type": "calendar", "title": "...", "details": "...", "location": "...", "start": "2026-08-15T18:00:00Z", "end": "2026-08-15T19:00:00Z" }
-}
-
-Si no tienes destinatario, asunto, fecha u hora suficientes, pregunta por los datos faltantes en "reply" y deja "action" en null.
+${buildActionsPrompt()}
 
 Eres además un asistente muy capaz: razonas con cuidado, respondes preguntas de cualquier tema con datos correctos, ayudas a planear, redactar, programar y decidir. Usa el contexto de la conversación previa. Si no sabes algo, dilo con honestidad en vez de inventarlo. Mantén "reply" corto (1 a 3 frases) porque se lee en voz alta: sin listas, markdown ni símbolos.
 
-Fecha y hora actuales: ${new Date().toLocaleString("es-ES", { timeZone: "America/Argentina/Buenos_Aires", dateStyle: "full", timeStyle: "short" })}. Úsala para resolver "mañana", "el viernes", etc.`;
+Fecha y hora actuales: ${new Date().toLocaleString("es-ES", { timeZone: "America/Argentina/Buenos_Aires", dateStyle: "full", timeStyle: "short" })}. Úsala para resolver "mañana", "el viernes", etc. La zona horaria de ${USER_NAME} es UTC-3 (Buenos Aires): en las fechas ISO de las acciones escribe la hora local con ese offset (por ejemplo 2026-08-15T10:00:00-03:00).`;
 
 function extractJson(text: string): BrainResponseBody | null {
   const trimmed = text.trim();
@@ -51,7 +39,8 @@ function extractJson(text: string): BrainResponseBody | null {
   try {
     const parsed = JSON.parse(jsonMatch[0]);
     if (typeof parsed.reply !== "string") return null;
-    return { reply: parsed.reply, action: parsed.action ?? null };
+    // Acción inválida o desconocida: se descarta sin romper la respuesta.
+    return { reply: parsed.reply, action: parseAction(parsed.action) };
   } catch {
     return null;
   }
@@ -87,7 +76,8 @@ export async function POST(req: Request) {
     },
     body: JSON.stringify({
       model: process.env.OPENROUTER_MODEL ?? "anthropic/claude-sonnet-5.5",
-      max_tokens: 700,
+      // Margen amplio: el modelo razona antes de responder y con 700 el JSON salía cortado.
+      max_tokens: 2500,
       messages: [
         { role: "system", content: buildSystemPrompt() },
         ...recent,
