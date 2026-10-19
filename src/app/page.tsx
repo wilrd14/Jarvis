@@ -3,10 +3,7 @@
 import { useCallback, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import HologramCore, { AssistantState } from "@/components/HologramCore";
-import {
-  useSpeechRecognition,
-  isSpeechRecognitionSupported,
-} from "@/hooks/useSpeechRecognition";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { useAudioAmplitude } from "@/hooks/useAudioAmplitude";
 import { ASSISTANT_NAME, USER_NAME } from "@/lib/config";
 import { runAssistantAction, type AssistantAction } from "@/lib/actions";
@@ -25,14 +22,13 @@ const VOICE_OUTPUT_ENABLED = false;
 export default function Home() {
   const [state, setState] = useState<AssistantState>("idle");
   const [lastReply, setLastReply] = useState<string>(
-    `Hola ${USER_NAME}, soy ${ASSISTANT_NAME}. Mantené presionado el botón para hablarme.`
+    `Hola ${USER_NAME}, soy ${ASSISTANT_NAME}. Toca el micrófono para hablarme.`
   );
   const [pendingAction, setPendingAction] = useState<AssistantAction | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [textInput, setTextInput] = useState("");
 
-  const { transcript, isListening, start, stop } = useSpeechRecognition();
-  const { amplitude, playWithAmplitude } = useAudioAmplitude();
+  const { amplitude: speakAmplitude, playWithAmplitude, stop: stopSpeaking } = useAudioAmplitude();
 
   const speak = useCallback(async (text: string) => {
     setState("speaking");
@@ -89,22 +85,30 @@ export default function Home() {
     }
   }, [speak]);
 
-  const handleMicDown = useCallback(() => {
-    if (!isSpeechRecognitionSupported()) {
-      setErrorMsg(
-        "Tu navegador no soporta reconocimiento de voz. Probá con Chrome de escritorio."
-      );
+  const voice = useVoiceInput(handleFinalTranscript);
+  const isListening = voice.status === "listening";
+  const effectiveState: AssistantState = isListening
+    ? "listening"
+    : voice.status === "processing"
+      ? "processing"
+      : state;
+  const amplitude = isListening ? voice.level : speakAmplitude;
+  const shownError = errorMsg ?? voice.error;
+
+  const handleMicClick = useCallback(() => {
+    if (voice.status === "listening") {
+      voice.stop();
       return;
+    }
+    if (voice.status === "processing" || state === "processing") return;
+    if (state === "speaking") {
+      stopSpeaking();
+      setState("idle");
     }
     setErrorMsg(null);
     setPendingAction(null);
-    setState("listening");
-    start(handleFinalTranscript);
-  }, [start, handleFinalTranscript]);
-
-  const handleMicUp = useCallback(() => {
-    stop();
-  }, [stop]);
+    voice.start();
+  }, [voice, state, stopSpeaking]);
 
   const handleTextSubmit = useCallback(
     (e: React.FormEvent) => {
@@ -124,28 +128,28 @@ export default function Home() {
           {ASSISTANT_NAME}
         </h1>
         <p className="mt-1 font-[family-name:var(--font-mono)] text-xs uppercase tracking-[0.2em] text-emerald/70">
-          {STATE_LABEL[state]}
+          {STATE_LABEL[effectiveState]}
         </p>
       </header>
 
       <div className="flex flex-1 flex-col items-center justify-center gap-8">
-        <HologramCore state={state} amplitude={amplitude} size={340} />
+        <HologramCore state={effectiveState} amplitude={amplitude} size={340} />
 
         <AnimatePresence mode="wait">
           <motion.p
-            key={isListening ? transcript || "listening" : lastReply}
+            key={isListening ? "listening" : lastReply}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.3 }}
             className="max-w-md text-center text-lg text-foreground/90"
           >
-            {isListening ? transcript || "…" : lastReply}
+            {isListening ? "Te escucho…" : lastReply}
           </motion.p>
         </AnimatePresence>
 
-        {errorMsg && (
-          <p className="max-w-md text-center text-sm text-accent-spark/80">{errorMsg}</p>
+        {shownError && (
+          <p className="max-w-md text-center text-sm text-accent-spark/80">{shownError}</p>
         )}
 
         <AnimatePresence>
@@ -197,11 +201,8 @@ export default function Home() {
       </form>
 
       <button
-        onMouseDown={handleMicDown}
-        onMouseUp={handleMicUp}
-        onTouchStart={handleMicDown}
-        onTouchEnd={handleMicUp}
-        disabled={state === "processing" || state === "speaking"}
+        onClick={handleMicClick}
+        disabled={effectiveState === "processing"}
         aria-pressed={isListening}
         className="relative flex h-16 w-16 items-center justify-center rounded-full border border-turquoise/50 bg-panel text-core transition disabled:opacity-40 active:scale-95"
       >
@@ -216,7 +217,7 @@ export default function Home() {
         </svg>
       </button>
       <p className="mt-2 font-[family-name:var(--font-mono)] text-[10px] uppercase tracking-widest text-foreground/40">
-        Mantené presionado para hablar
+        {isListening ? "Toca para enviar" : effectiveState === "speaking" ? "Toca para interrumpir" : "Toca para hablar"}
       </p>
     </main>
   );
