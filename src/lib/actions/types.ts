@@ -43,7 +43,7 @@ export interface ActionDefinition<T extends { type: string }> {
   /** "confirm": el usuario debe confirmar con un clic. "low": inocua. */
   risk: ActionRisk;
   /** Título y detalle para la tarjeta de confirmación. */
-  label: (action: T) => { title: string; detail: string };
+  label: (action: T) => { title: string; detail: string; confirmLabel?: string };
   /** Valida estrictamente lo que devolvió el modelo; null si es inválido. */
   parse: (raw: unknown) => T | null;
   execution: ClientExecution<T> | ServerExecution<T>;
