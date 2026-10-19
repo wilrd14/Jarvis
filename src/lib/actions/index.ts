@@ -15,12 +15,19 @@ import { calendarAction } from "./calendar";
 import { emailAction } from "./email";
 import { clipboardReadAction, clipboardWriteAction } from "./clipboard";
 import { fileSearchAction, fileOpenAction } from "./files";
+import { lockScreenAction } from "./lock-screen";
+import { openAppAction } from "./open-app";
+import { openFolderAction } from "./open-folder";
+import { openUrlAction } from "./open-url";
+import { screenshotAction } from "./screenshot";
+import { volumeAction } from "./volume";
 import type { ActionDefinition } from "./types";
 
 export type { ActionDefinition, ActionRisk, ServerActionResult } from "./types";
 export type { EmailAction } from "./email";
 export type { CalendarAction } from "./calendar";
 
+const PC_CONTROL_ACTIONS = [openAppAction, openFolderAction, openUrlAction, volumeAction, lockScreenAction, screenshotAction] as const;
 const ACTION_DEFINITIONS = [
   emailAction,
   calendarAction,
@@ -28,6 +35,7 @@ const ACTION_DEFINITIONS = [
   clipboardWriteAction,
   fileSearchAction,
   fileOpenAction,
+  ...PC_CONTROL_ACTIONS,
 ] as const;
 
 /** Unión discriminada por `type`, derivada del registro. */
