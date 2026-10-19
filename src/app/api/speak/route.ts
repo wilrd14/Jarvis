@@ -40,6 +40,7 @@ async function speakWithOpenRouter(text: string, apiKey: string) {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(45_000),
     body: JSON.stringify({
       model: getSetting("ttsModel"),
       voice: getSetting("ttsVoice"),
@@ -69,6 +70,7 @@ async function speakWithElevenLabs(text: string, apiKey: string, voiceId: string
     {
       method: "POST",
       headers: { "xi-api-key": apiKey, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         text,
         model_id: "eleven_multilingual_v2",

@@ -222,6 +222,7 @@ export function useVoiceInput(onFinal: (text: string) => void, options: VoiceInp
           method: "POST",
           headers: { "Content-Type": "audio/wav" },
           body: wav,
+          signal: AbortSignal.timeout(60_000),
         });
         const data = await res.json().catch(() => null);
         if (!res.ok) throw new Error(data?.error ?? "No se pudo transcribir el audio.");
@@ -231,7 +232,13 @@ export function useVoiceInput(onFinal: (text: string) => void, options: VoiceInp
         else setError("No te entendí, ¿puedes repetirlo?");
       } catch (err) {
         setStatus("idle");
-        setError(err instanceof Error ? err.message : "No se pudo transcribir el audio.");
+        setError(
+          err instanceof Error && err.name === "TimeoutError"
+            ? "La transcripción tardó demasiado. Inténtalo de nuevo."
+            : err instanceof Error
+              ? err.message
+              : "No se pudo transcribir el audio."
+        );
       }
     };
 

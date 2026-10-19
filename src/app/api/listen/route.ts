@@ -52,6 +52,7 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         model,
         temperature: 0,

@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:e2e": "node tests/run-all.mjs",
     "electron:dev": "node electron/dev.cjs",
     "electron:prepare": "node electron/prepare.cjs",
     "electron:start": "electron .",
