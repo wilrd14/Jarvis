@@ -27,6 +27,12 @@ export interface Settings {
   memoryEnabled: boolean;
   /** Jarvis empieza a hablar mientras el cerebro aún escribe la respuesta (voz por frases). */
   streamingVoice: boolean;
+  /** Elegir el modelo segun la pregunta: "auto" usa el rapido en lo simple; "main" siempre el principal. */
+  modelStrategy: "auto" | "main";
+  /** Modelo barato para charla y ordenes sencillas (modelStrategy auto). */
+  fastModel: string;
+  /** Tope de tokens de la respuesta del cerebro (tambien es lo que OpenRouter reserva del saldo). */
+  brainMaxTokens: number;
 }
 
 export type SettingName = keyof Settings;
@@ -47,6 +53,9 @@ export const DEFAULTS: Settings = {
   morningBriefing: false,
   memoryEnabled: true,
   streamingVoice: true,
+  modelStrategy: "auto",
+  fastModel: "anthropic/claude-haiku-5.5",
+  brainMaxTokens: 2500,
 };
 
 const ENV_NAMES: Partial<Record<SettingName, string>> = {
@@ -56,6 +65,7 @@ const ENV_NAMES: Partial<Record<SettingName, string>> = {
   ttsVoice: "OPENROUTER_TTS_VOICE",
   sttModel: "OPENROUTER_STT_MODEL",
   visionModel: "OPENROUTER_VISION_MODEL",
+  fastModel: "OPENROUTER_FAST_MODEL",
 };
 
 export function dataDir(): string {
@@ -66,7 +76,7 @@ function settingsFile(): string {
   return path.join(dataDir(), "settings.json");
 }
 
-const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel", "visionModel"] as const;
+const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel", "visionModel", "fastModel"] as const;
 const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled", "streamingVoice"] as const;
 
 // Valida un objeto arbitrario: devuelve solo los campos válidos (los demás se ignoran).
@@ -90,6 +100,9 @@ export function sanitize(input: unknown): Partial<Settings> {
     const c = src.city.trim().replace(/\s+/g, " ");
     if (c === "" || /^[\p{L}\p{M}0-9 .,'-]{1,80}$/u.test(c)) out.city = c;
   }
+  if (src.modelStrategy === "auto" || src.modelStrategy === "main") out.modelStrategy = src.modelStrategy;
+  const mt = src.brainMaxTokens;
+  if (typeof mt === "number" && Number.isFinite(mt)) out.brainMaxTokens = Math.min(8000, Math.max(300, Math.round(mt)));
   const s = src.silenceMs;
   if (typeof s === "number" && Number.isFinite(s)) {
     out.silenceMs = Math.min(5000, Math.max(500, Math.round(s)));

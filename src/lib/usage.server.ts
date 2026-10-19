@@ -33,6 +33,8 @@ interface State {
   cache: { key: string; data: RemoteUsage; costAtFetch: number } | null;
   inflight: Promise<RemoteUsage | null> | null;
   warned: boolean;
+  /** Gasto de la sesion por modelo (solo llamadas que lo informan, p. ej. el cerebro). */
+  byModel?: Record<string, KindTotals>;
 }
 
 // globalThis: las rutas pueden cargarse en módulos separados y deben compartir el mismo estado.
@@ -51,10 +53,16 @@ const state: State = (g.__jarvisUsage ??= {
 });
 
 /** Anota una llamada. `cost` es usage.cost de OpenRouter (USD); si no lo da, solo cuenta la llamada. */
-export function recordUsage(kind: UsageKind, cost?: unknown) {
+export function recordUsage(kind: UsageKind, cost?: unknown, model?: string) {
   const t = state.session[kind];
   t.calls += 1;
-  if (typeof cost === "number" && Number.isFinite(cost) && cost > 0) t.costUsd += cost;
+  const paid = typeof cost === "number" && Number.isFinite(cost) && cost > 0 ? cost : 0;
+  t.costUsd += paid;
+  if (model) {
+    const m = ((state.byModel ??= {})[model] ??= { calls: 0, costUsd: 0 });
+    m.calls += 1;
+    m.costUsd += paid;
+  }
 }
 
 export function sessionUsage() {
@@ -62,7 +70,7 @@ export function sessionUsage() {
     (a, t) => ({ calls: a.calls + t.calls, costUsd: a.costUsd + t.costUsd }),
     { calls: 0, costUsd: 0 },
   );
-  return { since: state.sessionStart, byKind: { ...state.session }, total };
+  return { since: state.sessionStart, byKind: { ...state.session }, byModel: { ...(state.byModel ?? {}) }, total };
 }
 
 function sessionCost() {

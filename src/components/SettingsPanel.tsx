@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import BudgetSettings from "@/components/BudgetSettings";
 import BriefingSettings from "./BriefingSettings";
 import MemorySettings from "./MemorySettings";
+import ModelRoutingSettings from "./ModelRoutingSettings";
 import StreamingVoiceSettings from "./StreamingVoiceSettings";
 
 // Lo que devuelve GET /api/settings (nunca incluye la key completa).
@@ -388,6 +389,7 @@ function SettingsForm({
           </div>
 
           <StreamingVoiceSettings streamingVoice={streamingVoice} onChange={setStreamingVoice} />
+          <ModelRoutingSettings />
           <BudgetSettings />
           <MemorySettings />
           <BriefingSettings city={city} morningBriefing={morningBriefing} onCity={setCity} onMorningBriefing={setMorningBriefing} />

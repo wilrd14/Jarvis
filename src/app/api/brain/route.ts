@@ -7,6 +7,7 @@ import { buildMemoryPrompt } from "@/lib/memory.server";
 import { signProposal } from "@/lib/proposals.server";
 import { buildActionsPrompt, getActionDefinition, parseAction, type AssistantAction } from "@/lib/actions";
 import { ReplyStream, SentenceSplitter } from "@/lib/replystream";
+import { chooseModel, fetchWithModelFallback } from "@/lib/modelrouter";
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -110,28 +111,40 @@ export async function POST(req: Request) {
     .slice(-LIMITS.historyItems)
     .map((t) => ({ role: t.role, content: t.content.slice(0, LIMITS.historyItemChars) }));
 
-  const model = getSetting("model");
-  if (body?.stream === true) return streamBrain(req, { apiKey, model, history: recent, message });
+  const mainModel = getSetting("model");
+  const maxTokens = getSetting("brainMaxTokens");
+  // Modelo de esta pregunta (rápido en lo simple, principal si hace falta calidad). La búsqueda web usa siempre el principal.
+  const chosen = chooseModel({ message, history: recent, mainModel, fastModel: getSetting("fastModel"), strategy: getSetting("modelStrategy") });
+  console.log(`[brain] modelo=${chosen.model} motivo="${chosen.reason}"`);
+  if (body?.stream === true) {
+    return streamBrain(req, { apiKey, model: chosen.model, mainModel, maxTokens, history: recent, message });
+  }
   let response: Response;
+  let usedModel = chosen.model;
   try {
-    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      signal: AbortSignal.timeout(60_000),
-      body: JSON.stringify({
-        model,
-        // Margen amplio: el modelo razona antes de responder y con 700 el JSON salía cortado.
-        max_tokens: 2500,
-        messages: [
-          { role: "system", content: buildSystemPrompt(message) },
-          ...recent,
-          { role: "user", content: message },
-        ],
-      }),
-    });
+    ({ response, model: usedModel } = await fetchWithModelFallback(
+      (model) =>
+        fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          signal: AbortSignal.timeout(60_000),
+          body: JSON.stringify({
+            model,
+            // Margen amplio por defecto (brainMaxTokens): el modelo razona antes de responder y con 700 el JSON salía cortado.
+            max_tokens: maxTokens,
+            messages: [
+              { role: "system", content: buildSystemPrompt(message) },
+              ...recent,
+              { role: "user", content: message },
+            ],
+          }),
+        }),
+      chosen.model,
+      mainModel,
+    ));
   } catch {
     return new Response(
       JSON.stringify({ error: "No se pudo contactar con OpenRouter: revisa tu conexión a internet." }),
@@ -144,7 +157,7 @@ export async function POST(req: Request) {
   }
 
   const data = await response.json();
-  recordUsage("brain", data?.usage?.cost);
+  recordUsage("brain", data?.usage?.cost, usedModel);
   const rawText: string = data.choices?.[0]?.message?.content ?? "";
 
   const parsed = extractJson(rawText) ?? {
@@ -152,7 +165,7 @@ export async function POST(req: Request) {
     action: null,
   };
 
-  return jsonResponse(await finishTurn(parsed, { apiKey, model, history: recent, message }));
+  return jsonResponse(await finishTurn(parsed, { apiKey, model: mainModel, history: recent, message }));
 }
 
 /** Cierra el turno: segundo paso de búsqueda web si hace falta y firma de acciones con confirmación. */
@@ -213,17 +226,18 @@ function speakableAction(rawAction: string | undefined): boolean {
  */
 function streamBrain(
   req: Request,
-  ctx: { apiKey: string; model: string; history: ChatTurn[]; message: string },
+  ctx: { apiKey: string; model: string; mainModel: string; maxTokens: number; history: ChatTurn[]; message: string },
 ): Response {
   const signal = AbortSignal.any([req.signal, AbortSignal.timeout(90_000)]);
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
       let cost: unknown;
       let recorded = false;
+      let usedModel = ctx.model;
       const record = () => {
         if (recorded) return;
         recorded = true;
-        recordUsage("brain", cost);
+        recordUsage("brain", cost, usedModel);
       };
       const emit = (event: string, data: unknown) => {
         try {
@@ -233,21 +247,27 @@ function streamBrain(
         }
       };
       try {
-        const upstream = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${ctx.apiKey}`, "Content-Type": "application/json" },
-          signal,
-          body: JSON.stringify({
-            model: ctx.model,
-            max_tokens: 2500,
-            stream: true,
-            messages: [
-              { role: "system", content: buildSystemPrompt(ctx.message) },
-              ...ctx.history,
-              { role: "user", content: ctx.message },
-            ],
-          }),
-        });
+        const { response: upstream, model: used } = await fetchWithModelFallback(
+          (model) =>
+            fetch("https://openrouter.ai/api/v1/chat/completions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${ctx.apiKey}`, "Content-Type": "application/json" },
+              signal,
+              body: JSON.stringify({
+                model,
+                max_tokens: ctx.maxTokens,
+                stream: true,
+                messages: [
+                  { role: "system", content: buildSystemPrompt(ctx.message) },
+                  ...ctx.history,
+                  { role: "user", content: ctx.message },
+                ],
+              }),
+            }),
+          ctx.model,
+          ctx.mainModel,
+        );
+        usedModel = used;
         if (!upstream.ok || !upstream.body) {
           console.error(`[OpenRouter] stream error ${upstream.status}: ${(await upstream.text()).slice(0, 500)}`);
           emit("error", { error: `El servicio de OpenRouter no respondió bien (código ${upstream.status}).` });
@@ -330,7 +350,7 @@ function streamBrain(
           (rs.replyStarted && rs.reply.trim()
             ? { reply: rs.reply, action: null }
             : { reply: rawText || "No pude generar una respuesta, ¿podés repetirlo?", action: null });
-        const result = await finishTurn(parsed, ctx);
+        const result = await finishTurn(parsed, { ...ctx, model: ctx.mainModel });
         emit("done", { ...result, streamed: index });
       } catch (err) {
         if (!req.signal.aborted) {
