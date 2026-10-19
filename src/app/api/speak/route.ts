@@ -1,4 +1,5 @@
 import { getSetting } from "@/lib/settings";
+import { rejectForeignRequest } from "@/lib/guard";
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
@@ -92,18 +93,29 @@ async function speakWithElevenLabs(text: string, apiKey: string, voiceId: string
 }
 
 export async function POST(req: Request) {
-  const { text } = await req.json();
+  const blocked = rejectForeignRequest(req);
+  if (blocked) return blocked;
+  let text: unknown;
+  try {
+    text = (await req.json())?.text;
+  } catch {
+    return json({ error: "Cuerpo JSON inválido." }, 400);
+  }
 
   if (!text || typeof text !== "string") {
     return json({ error: "Falta el texto a sintetizar." }, 400);
   }
 
   const openRouterKey = getSetting("openrouterApiKey");
-  if (openRouterKey) return speakWithOpenRouter(text, openRouterKey);
+  try {
+    if (openRouterKey) return await speakWithOpenRouter(text, openRouterKey);
 
-  const elevenKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID;
-  if (elevenKey && voiceId) return speakWithElevenLabs(text, elevenKey, voiceId);
+    const elevenKey = process.env.ELEVENLABS_API_KEY;
+    const voiceId = process.env.ELEVENLABS_VOICE_ID;
+    if (elevenKey && voiceId) return await speakWithElevenLabs(text, elevenKey, voiceId);
+  } catch {
+    return json({ error: "No se pudo contactar con el servicio de voz: revisa tu conexión a internet." }, 502);
+  }
 
   return json(
     { error: "Falta OPENROUTER_API_KEY (o ELEVENLABS_API_KEY y ELEVENLABS_VOICE_ID) en .env.local." },

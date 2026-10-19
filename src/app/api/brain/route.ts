@@ -1,6 +1,7 @@
 import { USER_NAME, ASSISTANT_NAME } from "@/lib/config";
 import { answerWithWebSearch, type WebSource } from "@/lib/websearch.server";
 import { getSetting } from "@/lib/settings";
+import { rejectForeignRequest } from "@/lib/guard";
 import { buildActionsPrompt, parseAction, type AssistantAction } from "@/lib/actions";
 
 interface ChatTurn {
@@ -60,7 +61,19 @@ function extractJson(text: string): BrainResponseBody | null {
 }
 
 export async function POST(req: Request) {
-  const { message, history = [] } = (await req.json()) as BrainRequestBody;
+  const blocked = rejectForeignRequest(req);
+  if (blocked) return blocked;
+  let body: Partial<BrainRequestBody> | null;
+  try {
+    body = (await req.json()) as Partial<BrainRequestBody> | null;
+  } catch {
+    return new Response(JSON.stringify({ error: "Cuerpo JSON inválido." }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  const message = body?.message;
+  const history = Array.isArray(body?.history) ? body.history : [];
 
   if (!message || typeof message !== "string") {
     return new Response(JSON.stringify({ error: "Falta el mensaje." }), {
@@ -78,27 +91,35 @@ export async function POST(req: Request) {
   }
 
   const recent = history
-    .filter((t) => (t.role === "user" || t.role === "assistant") && typeof t.content === "string")
+    .filter((t) => t && (t.role === "user" || t.role === "assistant") && typeof t.content === "string")
     .slice(-12);
 
   const model = getSetting("model");
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      // Margen amplio: el modelo razona antes de responder y con 700 el JSON salía cortado.
-      max_tokens: 2500,
-      messages: [
-        { role: "system", content: buildSystemPrompt() },
-        ...recent,
-        { role: "user", content: message },
-      ],
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        // Margen amplio: el modelo razona antes de responder y con 700 el JSON salía cortado.
+        max_tokens: 2500,
+        messages: [
+          { role: "system", content: buildSystemPrompt() },
+          ...recent,
+          { role: "user", content: message },
+        ],
+      }),
+    });
+  } catch {
+    return new Response(
+      JSON.stringify({ error: "No se pudo contactar con OpenRouter: revisa tu conexión a internet." }),
+      { status: 502, headers: { "Content-Type": "application/json" } }
+    );
+  }
 
   if (!response.ok) {
     const errorText = await response.text();

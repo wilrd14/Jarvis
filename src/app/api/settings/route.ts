@@ -1,3 +1,4 @@
+import { rejectForeignRequest } from "@/lib/guard";
 import { getAllSettings, sanitize, writeSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,8 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
+  const blocked = rejectForeignRequest(req);
+  if (blocked) return blocked;
   let body: unknown;
   try {
     body = await req.json();

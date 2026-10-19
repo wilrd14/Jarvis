@@ -1,4 +1,5 @@
 import { takeDue } from "@/lib/store/reminders";
+import { rejectForeignRequest } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +8,9 @@ export const dynamic = "force-dynamic";
  * disparados, así que cada uno se devuelve una sola vez. Los que vencieron con
  * la app apagada salen en la primera consulta.
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const blocked = rejectForeignRequest(req);
+  if (blocked) return blocked;
   try {
     const due = await takeDue();
     return Response.json({ due }, { headers: { "Cache-Control": "no-store" } });

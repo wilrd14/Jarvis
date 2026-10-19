@@ -2,8 +2,11 @@
 // petición y lo transcribe con un modelo Gemini vía OpenRouter.
 
 import { getSetting } from "@/lib/settings";
+import { rejectForeignRequest } from "@/lib/guard";
 
 const MAX_BYTES = 8 * 1024 * 1024;
+const NO_SPEECH_RE =
+  /^[\s[(*"']*(no (hay|se (escucha|oye|detecta|percibe)|escuch\w*|detect\w*)\b[^.]*\b(voz|habla|audio)\b[^.]*|sin (voz|habla|audio)\b[^.]*|silencio|(no )?(human )?speech( detected)?|\.{3}|…)[\s\])*"'.]*$/i;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -22,6 +25,8 @@ function formatFromMime(mime: string): string {
 }
 
 export async function POST(req: Request) {
+  const blocked = rejectForeignRequest(req);
+  if (blocked) return blocked;
   const apiKey = getSetting("openrouterApiKey");
   if (!apiKey) {
     return json({ error: "Falta la API key de OpenRouter: configúrala en Ajustes." }, 500);
@@ -81,6 +86,8 @@ export async function POST(req: Request) {
 
   const out = await res.json().catch(() => null);
   const content = out?.choices?.[0]?.message?.content;
-  const text = typeof content === "string" ? content.trim() : "";
+  let text = typeof content === "string" ? content.trim() : "";
+  // El modelo a veces explica que no hay voz en vez de devolver vacío; eso no es un mensaje del usuario.
+  if (text.length < 120 && NO_SPEECH_RE.test(text)) text = "";
   return json({ text });
 }
