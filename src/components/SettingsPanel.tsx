@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import BudgetSettings from "@/components/BudgetSettings";
 import BriefingSettings from "./BriefingSettings";
+import MemorySettings from "./MemorySettings";
 
 // Lo que devuelve GET /api/settings (nunca incluye la key completa).
 export interface PublicSettings {
@@ -383,6 +384,7 @@ function SettingsForm({
           </div>
 
           <BudgetSettings />
+          <MemorySettings />
           <BriefingSettings city={city} morningBriefing={morningBriefing} onCity={setCity} onMorningBriefing={setMorningBriefing} />
 
           <div className="flex items-start justify-between gap-4 opacity-60">

@@ -23,6 +23,7 @@ import { screenshotAction } from "./screenshot";
 import { screenAskAction } from "./screen";
 import { volumeAction } from "./volume";
 import { productivityActions } from "./productivity";
+import { memoryActions } from "./memory";
 import { dailyBriefingAction } from "./briefing";
 import type { ActionDefinition } from "./types";
 
@@ -40,6 +41,7 @@ const ACTION_DEFINITIONS = [
   fileOpenAction,
   ...PC_CONTROL_ACTIONS,
   ...productivityActions,
+  ...memoryActions,
   dailyBriefingAction,
 ] as const;
 

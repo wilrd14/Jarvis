@@ -6,6 +6,7 @@ export const SAFE_EXECUTE = new Set([
   "note_add", "note_list", "note_search", "note_delete",
   "reminder_add", "reminder_list", "reminder_cancel",
   "timer_start", "timer_cancel", "alarm_set", "daily_briefing",
+  "memory_add", "memory_list", "memory_search", "memory_forget",
 ]);
 
 let pass = 0;

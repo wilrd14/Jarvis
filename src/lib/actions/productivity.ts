@@ -9,7 +9,6 @@ import { isRecord, isoDate, str, type ActionDefinition, type ServerActionResult 
 import { TIMEZONE as TZ } from "../config";
 
 type Store = typeof import("../store/notes") & typeof import("../store/reminders");
-
 function store(): Store {
   const s = (globalThis as { __jarvisStore?: Store }).__jarvisStore;
   if (!s) throw new Error("El almacenamiento local solo está disponible en el servidor.");

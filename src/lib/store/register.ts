@@ -3,5 +3,6 @@
 // bundle del navegador). Se importa desde /api/actions/execute.
 import * as notes from "./notes";
 import * as reminders from "./reminders";
+import * as memory from "./memory";
 
-(globalThis as { __jarvisStore?: unknown }).__jarvisStore = { ...notes, ...reminders };
+(globalThis as { __jarvisStore?: unknown }).__jarvisStore = { ...notes, ...reminders, ...memory };
