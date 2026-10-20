@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** Cola de audio por Web Audio: cada frase se programa justo al terminar la anterior (sin huecos). */
 interface QueueStream {
@@ -41,6 +41,26 @@ export function useAudioAmplitude() {
     if (ctx.state === "suspended") void ctx.resume();
     return ctx;
   }, []);
+
+  // iOS/Safari solo deja sonar el audio si el contexto se crea y se reanuda dentro de un gesto del
+  // usuario; las respuestas llegan tras esperas de red, ya sin gesto. Se "desbloquea" en el primer toque.
+  useEffect(() => {
+    const events = ["pointerdown", "touchend", "click", "keydown"] as const;
+    const unlock = () => {
+      const ctx = getCtx();
+      try {
+        const src = ctx.createBufferSource();
+        src.buffer = ctx.createBuffer(1, 1, 22050);
+        src.connect(ctx.destination);
+        src.start(0);
+      } catch {
+        /* sin audio disponible */
+      }
+      if (ctx.state === "running") events.forEach((e) => window.removeEventListener(e, unlock, true));
+    };
+    events.forEach((e) => window.addEventListener(e, unlock, true));
+    return () => events.forEach((e) => window.removeEventListener(e, unlock, true));
+  }, [getCtx]);
 
   const stopTick = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
