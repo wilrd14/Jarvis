@@ -1,5 +1,6 @@
 "use client";
 
+import { setAudioSessionType } from "@/hooks/useAudioAmplitude";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type VoiceStatus = "idle" | "listening" | "processing";
@@ -131,6 +132,7 @@ export function useVoiceInput(onFinal: (text: string) => void, options: VoiceInp
       return;
     }
 
+    setAudioSessionType("play-and-record");
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({

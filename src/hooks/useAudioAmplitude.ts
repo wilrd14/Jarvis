@@ -23,6 +23,20 @@ export interface AudioQueue {
   cancel: () => void;
 }
 
+/**
+ * iOS: tras usar el micrófono la sesión de audio queda en modo "llamada" (auricular, o mudo con el
+ * interruptor de silencio). "playback" hace sonar la respuesta por el altavoz; "play-and-record" se
+ * pone antes de grabar. Navegadores sin Audio Session API lo ignoran.
+ */
+export function setAudioSessionType(type: "playback" | "play-and-record") {
+  try {
+    const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+    if (session && session.type !== type) session.type = type;
+  } catch {
+    /* sin Audio Session API */
+  }
+}
+
 export function useAudioAmplitude() {
   const [amplitude, setAmplitude] = useState(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -107,6 +121,7 @@ export function useAudioAmplitude() {
 
   const playWithAmplitude = useCallback((audioUrl: string, onEnded?: () => void) => {
     stop();
+    setAudioSessionType("playback");
 
     const audio = new Audio(audioUrl);
     audioElRef.current = audio;
@@ -147,6 +162,7 @@ export function useAudioAmplitude() {
   const queue = useMemo<AudioQueue>(() => ({
     begin: (onEnded) => {
       stop();
+      setAudioSessionType("playback");
       const ctx = getCtx();
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
