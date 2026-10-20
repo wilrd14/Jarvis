@@ -109,3 +109,7 @@ tests/              suites E2E
 ## Costes
 
 Todo pasa por OpenRouter y se paga por uso. Las órdenes locales no cuestan nada; el modelo rápido y la caché de voz reducen el gasto, y Jarvis muestra tu saldo real y puede bloquearse al llegar a un tope mensual.
+
+---
+
+Hecho por [Williams Villavizar](https://wilrd14.dev): desarrollador web en Santo Domingo, República Dominicana. [Ver portafolio](https://wilrd14.dev).
