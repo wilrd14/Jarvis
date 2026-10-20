@@ -41,6 +41,12 @@ export interface Settings {
   skillsExtraDir: string;
   /** Nombres de skills desactivadas (max. 100). */
   disabledSkills: string[];
+  /** Modelo para redactar documentos (vacio = el modelo principal `model`). */
+  docModel: string;
+  /** Tope de tokens de salida al redactar un documento (1000-16000). */
+  docMaxTokens: number;
+  /** Abrir el Explorador seleccionando el documento recien creado. */
+  docReveal: boolean;
 }
 
 export type SettingName = keyof Settings;
@@ -68,6 +74,9 @@ export const DEFAULTS: Settings = {
   skillsEnabled: true,
   skillsExtraDir: "",
   disabledSkills: [],
+  docModel: "",
+  docMaxTokens: 6000,
+  docReveal: true,
 };
 
 const ENV_NAMES: Partial<Record<SettingName, string>> = {
@@ -88,8 +97,8 @@ function settingsFile(): string {
   return path.join(dataDir(), "settings.json");
 }
 
-const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel", "visionModel", "fastModel"] as const;
-const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled", "streamingVoice", "ttsCache", "skillsEnabled"] as const;
+const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel", "visionModel", "fastModel", "docModel"] as const;
+const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled", "streamingVoice", "ttsCache", "skillsEnabled", "docReveal"] as const;
 
 // Valida un objeto arbitrario: devuelve solo los campos válidos (los demás se ignoran).
 export function sanitize(input: unknown): Partial<Settings> {
@@ -127,6 +136,8 @@ export function sanitize(input: unknown): Partial<Settings> {
   if (src.modelStrategy === "auto" || src.modelStrategy === "main") out.modelStrategy = src.modelStrategy;
   const mt = src.brainMaxTokens;
   if (typeof mt === "number" && Number.isFinite(mt)) out.brainMaxTokens = Math.min(8000, Math.max(300, Math.round(mt)));
+  const dt = src.docMaxTokens;
+  if (typeof dt === "number" && Number.isFinite(dt)) out.docMaxTokens = Math.min(16000, Math.max(1000, Math.round(dt)));
   const s = src.silenceMs;
   if (typeof s === "number" && Number.isFinite(s)) {
     out.silenceMs = Math.min(5000, Math.max(500, Math.round(s)));

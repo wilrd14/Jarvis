@@ -10,6 +10,8 @@ export interface ServerActionResult {
   message?: string;
   /** Texto que vuelve al cerebro como siguiente turno (ya acotado y etiquetado). */
   followUp?: string;
+  /** Código HTTP si falla (/api/actions/execute lo usa en lugar de 500). */
+  status?: number;
 }
 
 /** Resultado opcional de una acción de cliente. */
@@ -30,7 +32,10 @@ export interface ClientExecution<T> {
  */
 export interface ServerExecution<T> {
   kind: "server";
-  run: (action: T) => Promise<ServerActionResult>;
+  /** `ctx.token` es la firma de la propuesta (si la hubo). */
+  run: (action: T, ctx?: { token?: string }) => Promise<ServerActionResult>;
+  /** Tiempo máximo que espera el navegador (por defecto sin límite propio). Solo para acciones lentas. */
+  timeoutMs?: number;
 }
 
 export interface ActionDefinition<T extends { type: string }> {
@@ -43,7 +48,7 @@ export interface ActionDefinition<T extends { type: string }> {
   /** "confirm": el usuario debe confirmar con un clic. "low": inocua. */
   risk: ActionRisk;
   /** Título y detalle para la tarjeta de confirmación. */
-  label: (action: T) => { title: string; detail: string; confirmLabel?: string };
+  label: (action: T) => { title: string; detail: string; confirmLabel?: string; busyText?: string };
   /** Valida estrictamente lo que devolvió el modelo; null si es inválido. */
   parse: (raw: unknown) => T | null;
   execution: ClientExecution<T> | ServerExecution<T>;

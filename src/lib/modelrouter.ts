@@ -46,6 +46,11 @@ const HEAVY: { re: RegExp; reason: string }[] = [
     reason: "redaccion o transformacion de texto",
   },
   {
+    // Documentos (acción document_create): el modelo rápido no es fiable eligiendo formato/brief/skill.
+    re: /\b(documento\w*|informe\w*|presentacion\w*|diapositiva\w*|pdf|word|excel|xlsx|docx|pptx|csv|markdown|planilla\w*|hoja de calculo|tabla\w*|(genera|generar|generame|armame|arma|armar|hazme|preparame) (un|una)\b|guarda\w* (esto|esta|este|eso) (como|en)|exporta\w*)\b/,
+    reason: "creacion de documentos",
+  },
+  {
     re: /\b(calendario|evento|agenda|reunion|cita|recordatorio|recordatorios|recuerdame|recordame|avisame|alarma|despiertame|programa (un|una)|agendar?|cancela (el|mi|la) (evento|cita|reunion|recordatorio|alarma)|reprograma\w*)\b/,
     reason: "fechas, horas o recordatorios",
   },

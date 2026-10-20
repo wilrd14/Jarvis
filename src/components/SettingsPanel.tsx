@@ -6,6 +6,7 @@ import BudgetSettings from "@/components/BudgetSettings";
 import BriefingSettings from "./BriefingSettings";
 import MemorySettings from "./MemorySettings";
 import SkillsSettings from "./SkillsSettings";
+import DocumentsSettings from "./DocumentsSettings";
 import ModelRoutingSettings from "./ModelRoutingSettings";
 import StreamingVoiceSettings from "./StreamingVoiceSettings";
 import VoiceCostSettings from "./VoiceCostSettings";
@@ -400,6 +401,7 @@ function SettingsForm({
           <BudgetSettings />
           <MemorySettings />
           <SkillsSettings />
+          <DocumentsSettings />
           <BriefingSettings city={city} morningBriefing={morningBriefing} onCity={setCity} onMorningBriefing={setMorningBriefing} />
 
           <div className="flex items-start justify-between gap-4 opacity-60">

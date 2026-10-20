@@ -113,6 +113,17 @@ const cases = [
   ["Lo de ayer", "M"],
   ["Necesito ayuda con mi tarea", "M"],
   ["Mi amigo está triste", "M"],
+  // --- documentos: siempre el principal
+  ["Hazme un informe en Word", "M"],
+  ["Genera un PDF", "M"],
+  ["Arma una presentación", "M"],
+  ["Haz una tabla de gastos en Excel", "M"],
+  ["Guarda esto como Markdown", "M"],
+  ["Genera un documento", "M"],
+  ["Redacta una carta formal", "M"],
+  ["Abre el documento", "M"],
+  ["Pásame esto a Excel", "M"],
+  ["Prepárame una planilla", "M"],
 ];
 // Corrige el caso ambiguo marcado arriba: "Abre el navegador y busca nada" no empieza con patron compuesto -> abre = simple.
 // Se deja documentado con su resultado real en lugar de forzarlo:

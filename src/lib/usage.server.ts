@@ -4,7 +4,7 @@
 import { getSetting } from "@/lib/settings";
 import { jsonResponse } from "@/lib/guard";
 
-export type UsageKind = "brain" | "voice" | "stt" | "search";
+export type UsageKind = "brain" | "voice" | "stt" | "search" | "doc";
 
 export interface KindTotals {
   calls: number;
@@ -46,6 +46,7 @@ const state: State = (g.__jarvisUsage ??= {
     voice: { calls: 0, costUsd: 0 },
     stt: { calls: 0, costUsd: 0 },
     search: { calls: 0, costUsd: 0 },
+    doc: { calls: 0, costUsd: 0 },
   },
   sessionStart: Date.now(),
   cache: null,
@@ -55,7 +56,7 @@ const state: State = (g.__jarvisUsage ??= {
 
 /** Anota una llamada. `cost` es usage.cost de OpenRouter (USD); si no lo da, solo cuenta la llamada. */
 export function recordUsage(kind: UsageKind, cost?: unknown, model?: string) {
-  const t = state.session[kind];
+  const t = (state.session[kind] ??= { calls: 0, costUsd: 0 });
   t.calls += 1;
   const paid = typeof cost === "number" && Number.isFinite(cost) && cost > 0 ? cost : 0;
   t.costUsd += paid;

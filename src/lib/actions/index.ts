@@ -26,6 +26,7 @@ import { productivityActions } from "./productivity";
 import { memoryActions } from "./memory";
 import { dailyBriefingAction } from "./briefing";
 import { skillActions } from "./skills";
+import { documentActions } from "./documents";
 import type { ActionDefinition } from "./types";
 
 export type { ActionDefinition, ActionRisk, ServerActionResult } from "./types";
@@ -45,6 +46,7 @@ const ACTION_DEFINITIONS = [
   ...memoryActions,
   dailyBriefingAction,
   ...skillActions,
+  ...documentActions,
 ] as const;
 
 /** Unión discriminada por `type`, derivada del registro. */
@@ -101,11 +103,22 @@ export async function runAssistantAction(
     const out = await def.execution.run(action);
     return out ?? {};
   }
-  const res = await fetch("/api/actions/execute", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, actionToken }),
-  });
+  // Acciones lentas (documentos con IA) declaran su propio tope; el resto no cambia.
+  const timeoutMs = def.execution.timeoutMs;
+  let res: Response;
+  try {
+    res = await fetch("/api/actions/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, actionToken }),
+      ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new Error("La acción tardó demasiado en responder. Puede que haya terminado: revisa la carpeta antes de repetirla.");
+    }
+    throw err;
+  }
   const data = await res.json().catch(() => null);
   if (!res.ok || !data?.ok) {
     throw new Error(data?.error ?? data?.message ?? "No se pudo ejecutar la acción.");

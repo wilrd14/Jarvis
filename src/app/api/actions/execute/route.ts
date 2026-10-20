@@ -46,8 +46,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await def.execution.run(action);
-    return json(result, result.ok ? 200 : 500);
+    const token = (body as { actionToken?: unknown }).actionToken;
+    const result = await def.execution.run(action, { token: typeof token === "string" ? token : undefined });
+    return json(result, result.ok ? 200 : (result.status ?? 500));
   } catch {
     return json({ ok: false, error: "Falló la ejecución de la acción." }, 500);
   }

@@ -14,6 +14,7 @@ import SpendBadge from "@/components/SpendBadge";
 import SettingsPanel,{ type PublicSettings } from "@/components/SettingsPanel";
 import { createSpeechSession, streamBrain, StreamUnavailable, type BrainDone, type SpeechSession } from "@/lib/brainStream";
 import { normalizeSpaces } from "@/lib/replystream";
+import { setDocCostContext } from "@/lib/docs/cost";
 
 // Margen tras terminar el audio de Jarvis antes de reabrir el micrófono
 // (evita captar la cola/eco de su propia voz).
@@ -99,6 +100,8 @@ export default function Home() {
       .then((data: PublicSettings | null) => {
         if (!data) return;
         setSettings(data);
+        const d = data as PublicSettings & { docModel?: string; docMaxTokens?: number };
+        setDocCostContext(d.docModel || d.model, d.docMaxTokens);
         if (!data.hasKey) setSettingsOpen(true);
       })
       .catch(() => {});

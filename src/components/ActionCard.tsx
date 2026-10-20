@@ -13,11 +13,12 @@ interface ActionCardProps {
 }
 
 export default function ActionCard({ action, token, onDone }: ActionCardProps) {
-  const { title, detail, confirmLabel } = describeAction(action);
+  const { title, detail, confirmLabel, busyText } = describeAction(action);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const confirm = async () => {
+    if (busy) return; // evita el doble envío
     setBusy(true);
     setError(null);
     try {
@@ -39,11 +40,17 @@ export default function ActionCard({ action, token, onDone }: ActionCardProps) {
       <p className="font-[family-name:var(--font-mono)] text-xs uppercase tracking-widest text-turquoise">
         {title}
       </p>
-      <p className="mt-2 text-sm text-foreground/80">{detail}</p>
+      <p className="mt-2 whitespace-pre-line text-sm text-foreground/80">{detail}</p>
+      {busy && busyText && (
+        <p role="status" aria-live="polite" className="mt-2 animate-pulse text-xs text-turquoise">
+          {busyText}
+        </p>
+      )}
       {error && <p className="mt-2 text-xs text-accent-spark/80">{error}</p>}
       <button
         onClick={confirm}
         disabled={busy}
+        aria-busy={busy}
         className="mt-3 w-full rounded-lg bg-emerald/90 px-4 py-2 text-sm font-medium text-background transition hover:bg-emerald disabled:opacity-40"
       >
         {confirmLabel ?? "Confirmar y abrir"}

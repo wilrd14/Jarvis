@@ -201,6 +201,17 @@ const negatives = [
   "jarvis",
   "por favor",
   "ok",
+  // documentos: necesitan IA o son ambiguas, nunca una orden local
+  "hazme un informe en Word",
+  "genera un PDF",
+  "abre el documento",
+  "guarda esto como markdown",
+  "arma una presentación sobre ventas",
+  "haz una tabla de gastos en Excel",
+  "redacta una carta formal",
+  "abre el último documento que creaste",
+  "crea un documento de Word",
+  "guarda esto como PDF",
 ];
 for (const phrase of negatives) {
   const m = match(phrase, NOW);

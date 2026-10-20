@@ -33,6 +33,7 @@ const KIND_LABEL: Record<string, string> = {
   voice: "Voz",
   stt: "Transcripción",
   search: "Búsqueda",
+  doc: "Documentos",
 };
 
 const usd = (n: number | null | undefined) =>
