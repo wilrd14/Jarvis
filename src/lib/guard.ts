@@ -1,3 +1,5 @@
+import { hasValidSession, isRemoteHost } from "@/lib/remote.server";
+
 // Utilidades de protección para las rutas /api: límites de tamaño, rate limit en memoria
 // (protegen el saldo de OpenRouter) y respuestas de error que no filtran detalles del proveedor.
 
@@ -55,13 +57,18 @@ function hostnameOf(hostHeader: string): string {
   return m ? m[1] : "";
 }
 
-/** Devuelve una respuesta 403 si la petición no viene de la propia app local; null si es válida. */
-export function rejectForeignRequest(req: Request): Response | null {
+/**
+ * Devuelve una respuesta 403 si la petición no viene de la propia app; null si es válida.
+ * Además del equipo local, acepta el Host del acceso remoto (Tailscale) con sesión de PIN válida,
+ * salvo en rutas `localOnly` (ajustes, PIN): esas solo se tocan desde el propio PC.
+ */
+export function rejectForeignRequest(req: Request, localOnly = false): Response | null {
   const host = req.headers.get("host");
   const origin = req.headers.get("origin");
   const fetchSite = req.headers.get("sec-fetch-site");
 
   let ok = !!host && LOOPBACK.has(hostnameOf(host));
+  if (!ok && !localOnly && isRemoteHost(host) && hasValidSession(req.headers.get("cookie"))) ok = true;
   if (ok && origin && origin !== "null") {
     try {
       ok = new URL(origin).host.toLowerCase() === host!.trim().toLowerCase();

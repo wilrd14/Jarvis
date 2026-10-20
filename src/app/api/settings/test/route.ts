@@ -10,7 +10,7 @@ const json = (body: unknown, status = 200) =>
 // Verifica una key contra OpenRouter. Acepta { apiKey } opcional (para probar
 // antes de guardar); si no viene, prueba la que está configurada.
 export async function POST(req: Request) {
-  const blocked = rejectForeignRequest(req);
+  const blocked = rejectForeignRequest(req, true);
   if (blocked) return blocked;
   let candidate = "";
   try {

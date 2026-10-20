@@ -7,6 +7,7 @@ import BriefingSettings from "./BriefingSettings";
 import MemorySettings from "./MemorySettings";
 import SkillsSettings from "./SkillsSettings";
 import DocumentsSettings from "./DocumentsSettings";
+import RemoteSettings from "./RemoteSettings";
 import ModelRoutingSettings from "./ModelRoutingSettings";
 import StreamingVoiceSettings from "./StreamingVoiceSettings";
 import VoiceCostSettings from "./VoiceCostSettings";
@@ -402,6 +403,7 @@ function SettingsForm({
           <MemorySettings />
           <SkillsSettings />
           <DocumentsSettings />
+          <RemoteSettings />
           <BriefingSettings city={city} morningBriefing={morningBriefing} onCity={setCity} onMorningBriefing={setMorningBriefing} />
 
           <div className="flex items-start justify-between gap-4 opacity-60">

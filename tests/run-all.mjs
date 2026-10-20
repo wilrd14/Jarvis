@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
-const all = ["security", "flows", "audio", "robustness", "localcommands", "documents"];
+const all = ["security", "flows", "audio", "robustness", "localcommands", "documents", "remote"];
 const wanted = process.argv.slice(2).length ? process.argv.slice(2) : all;
 let failed = 0;
 for (const name of wanted) {

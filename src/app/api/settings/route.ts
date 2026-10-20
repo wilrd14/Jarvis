@@ -24,7 +24,7 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const blocked = rejectForeignRequest(req);
+  const blocked = rejectForeignRequest(req, true);
   if (blocked) return blocked;
   let body: unknown;
   try {

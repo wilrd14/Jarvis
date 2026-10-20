@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { hasValidSession, isRemoteHost } from "@/lib/remote.server";
 
 // Jarvis escucha solo en 127.0.0.1, pero cualquier página web abierta en el navegador
 // puede intentar llamar a ese puerto (CSRF) o resolver un dominio suyo a 127.0.0.1
@@ -15,12 +16,26 @@ function hostnameOf(host: string) {
   return host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0];
 }
 
+// Acceso remoto (Tailscale): estas rutas se pueden ver sin sesión para poder poner el PIN.
+const REMOTE_PUBLIC = new Set(["/login", "/api/remote/login", "/manifest.webmanifest"]);
+
 export function proxy(req: NextRequest) {
   const host = req.headers.get("host") ?? "";
+  const path = req.nextUrl.pathname;
+  const isApi = path.startsWith("/api/");
+  const remote = !LOCAL_HOSTNAMES.has(hostnameOf(host).toLowerCase());
 
-  // Anti DNS rebinding: el Host debe ser el del propio equipo.
-  if (!LOCAL_HOSTNAMES.has(hostnameOf(host).toLowerCase())) {
-    return deny(403, "Host no permitido.");
+  // Anti DNS rebinding: el Host debe ser el del propio equipo o el del acceso remoto configurado.
+  if (remote) {
+    if (!isRemoteHost(host)) return deny(403, "Host no permitido.");
+    // El panel de ajustes y la config del acceso remoto solo se tocan desde el propio PC.
+    if (path.startsWith("/api/remote/config") || (path.startsWith("/api/settings") && req.method !== "GET")) {
+      return deny(403, "Solo disponible desde el PC.");
+    }
+    if (!REMOTE_PUBLIC.has(path) && !hasValidSession(req.headers.get("cookie"))) {
+      if (isApi) return deny(401, "Necesitas iniciar sesión con tu PIN.");
+      return NextResponse.redirect(new URL("/login", `https://${host}`));
+    }
   }
 
   // Anti CSRF: los navegadores marcan el origen de la petición; solo la propia app o una
@@ -52,4 +67,7 @@ export function proxy(req: NextRequest) {
   return NextResponse.next();
 }
 
-export const config = { matcher: "/api/:path*" };
+// Todo menos los archivos estáticos (no contienen datos): páginas y API pasan por el guard.
+export const config = {
+  matcher: "/((?!_next/static|_next/image|favicon.ico|icon-.*\\.png|logo.svg).*)",
+};
