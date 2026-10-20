@@ -24,7 +24,7 @@ const PRESETS = [
   { name: "kokoro-em_alex", model: "hexgrad/kokoro-82m", voice: "em_alex", usdPerMChars: 0.62 },
   { name: "gemini-3.8-flash-lite-kore", model: "google/gemini-3.8-flash-lite-tts", voice: "Kore", usdPerMChars: 10 },
   { name: "gemini-3.8-flash-kore", model: "google/gemini-3.8-flash-tts", voice: "Kore", usdPerMChars: 15 },
-  { name: "deepgram-aura2-alvaro", model: "deepgram/aura-2", voice: "alvaro-es", usdPerMChars: 30 },
+  { name: "deepgram-aura2-alvaro", model: "deepgram/aura-2", voice: "aura-2-alvaro-es", usdPerMChars: 30 },
 ];
 
 function pcm16ToWav(pcm, rate = 24000) {

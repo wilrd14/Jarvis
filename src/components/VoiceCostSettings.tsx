@@ -42,7 +42,7 @@ export const VOICE_PRESETS: {
   {
     label: "Deepgram Aura 2 · Álvaro",
     model: "deepgram/aura-2",
-    voice: "alvaro-es",
+    voice: "aura-2-alvaro-es",
     price: "$30 por millón de caracteres",
     spanish: "español nativo",
   },

@@ -53,7 +53,7 @@ const VOICES: { label: string; model: string; voice: string }[] = [
   {
     label: "Deepgram Aura 2 · Alvaro (español)",
     model: "deepgram/aura-2",
-    voice: "alvaro-es",
+    voice: "aura-2-alvaro-es",
   },
   {
     label: "Gemini 3.1 Flash TTS (preview)",
