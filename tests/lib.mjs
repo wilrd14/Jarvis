@@ -7,6 +7,7 @@ export const SAFE_EXECUTE = new Set([
   "reminder_add", "reminder_list", "reminder_cancel",
   "timer_start", "timer_cancel", "alarm_set", "daily_briefing",
   "memory_add", "memory_list", "memory_search", "memory_forget",
+  "skill_use", "skill_read",
 ]);
 
 let pass = 0;

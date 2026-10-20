@@ -4,5 +4,7 @@
 import * as notes from "./notes";
 import * as reminders from "./reminders";
 import * as memory from "./memory";
+import * as skills from "../skills.server";
 
 (globalThis as { __jarvisStore?: unknown }).__jarvisStore = { ...notes, ...reminders, ...memory };
+(globalThis as { __jarvisSkills?: unknown }).__jarvisSkills = skills;

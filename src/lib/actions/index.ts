@@ -25,6 +25,7 @@ import { volumeAction } from "./volume";
 import { productivityActions } from "./productivity";
 import { memoryActions } from "./memory";
 import { dailyBriefingAction } from "./briefing";
+import { skillActions } from "./skills";
 import type { ActionDefinition } from "./types";
 
 export type { ActionDefinition, ActionRisk, ServerActionResult } from "./types";
@@ -43,6 +44,7 @@ const ACTION_DEFINITIONS = [
   ...productivityActions,
   ...memoryActions,
   dailyBriefingAction,
+  ...skillActions,
 ] as const;
 
 /** Unión discriminada por `type`, derivada del registro. */

@@ -12,4 +12,7 @@ fs.cpSync(path.join(root, ".next", "static"), path.join(sa, ".next", "static"), 
 if (fs.existsSync(path.join(root, "public"))) {
   fs.cpSync(path.join(root, "public"), path.join(sa, "public"), { recursive: true });
 }
+if (fs.existsSync(path.join(root, "skills-bundled"))) {
+  fs.cpSync(path.join(root, "skills-bundled"), path.join(sa, "skills-bundled"), { recursive: true });
+}
 console.log("standalone preparado");

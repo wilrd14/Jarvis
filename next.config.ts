@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   // Servidor autocontenido para empaquetar con Electron.
   output: "standalone",
   poweredByHeader: false,
+  // Skills incluidas: se leen del disco (no se importan), asi que hay que pedir que se copien al standalone.
+  outputFileTracingIncludes: { "/api/**": ["./skills-bundled/**/*"] },
   async headers() {
     return [
       {

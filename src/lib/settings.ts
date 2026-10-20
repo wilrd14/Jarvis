@@ -35,6 +35,12 @@ export interface Settings {
   brainMaxTokens: number;
   /** Guardar en disco el audio de frases cortas para no pagar dos veces por la misma. */
   ttsCache: boolean;
+  /** Usar skills (instrucciones en Markdown) en el prompt del cerebro. */
+  skillsEnabled: boolean;
+  /** Carpeta extra de skills (ruta absoluta de Windows; vacio = desactivada). Solo se leen instrucciones. */
+  skillsExtraDir: string;
+  /** Nombres de skills desactivadas (max. 100). */
+  disabledSkills: string[];
 }
 
 export type SettingName = keyof Settings;
@@ -59,6 +65,9 @@ export const DEFAULTS: Settings = {
   fastModel: "anthropic/claude-haiku-5.5",
   brainMaxTokens: 2500,
   ttsCache: true,
+  skillsEnabled: true,
+  skillsExtraDir: "",
+  disabledSkills: [],
 };
 
 const ENV_NAMES: Partial<Record<SettingName, string>> = {
@@ -80,7 +89,7 @@ function settingsFile(): string {
 }
 
 const STRING_FIELDS = ["openrouterApiKey", "model", "ttsModel", "ttsVoice", "sttModel", "visionModel", "fastModel"] as const;
-const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled", "streamingVoice", "ttsCache"] as const;
+const BOOL_FIELDS = ["conversationMode", "wakeWord", "blockOnBudget", "morningBriefing", "memoryEnabled", "streamingVoice", "ttsCache", "skillsEnabled"] as const;
 
 // Valida un objeto arbitrario: devuelve solo los campos válidos (los demás se ignoran).
 export function sanitize(input: unknown): Partial<Settings> {
@@ -102,6 +111,18 @@ export function sanitize(input: unknown): Partial<Settings> {
   if (typeof src.city === "string") {
     const c = src.city.trim().replace(/\s+/g, " ");
     if (c === "" || /^[\p{L}\p{M}0-9 .,'-]{1,80}$/u.test(c)) out.city = c;
+  }
+  // Carpeta extra de skills: ruta absoluta de Windows (X:\...), sin caracteres de control ni "..".
+  if (typeof src.skillsExtraDir === "string") {
+    const d = src.skillsExtraDir.trim();
+    const bad = /[\u0000-\u001f\u007f<>"|?*]/;
+    if (d === "" || (d.length <= 260 && /^[A-Za-z]:[\\/]/.test(d) && !bad.test(d) && !d.split(/[\\/]/).includes(".."))) {
+      out.skillsExtraDir = d;
+    }
+  }
+  if (Array.isArray(src.disabledSkills)) {
+    const names = src.disabledSkills.filter((n): n is string => typeof n === "string" && n.length <= 64 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(n));
+    out.disabledSkills = [...new Set(names)].slice(0, 100);
   }
   if (src.modelStrategy === "auto" || src.modelStrategy === "main") out.modelStrategy = src.modelStrategy;
   const mt = src.brainMaxTokens;
